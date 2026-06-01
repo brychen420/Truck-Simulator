@@ -156,4 +156,4 @@ Consistent with the reference paper:
 
 ## Reference
 
-Cao et al. (2026). *Kinematic modeling and hybrid A\* path planning for truck-trailer parking.* (See `truck_parking_hybrid_astar.pdf`.)
+Cao et al. (2026). *Kinematic modeling and hybrid A\* path planning for truck-trailer parking.*
