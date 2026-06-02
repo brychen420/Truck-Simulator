@@ -15,7 +15,7 @@ class HUD:
     """Overlay UI: speed/steer/hitch gauges and status text."""
 
     PANEL_W = 270
-    PANEL_H = 150
+    PANEL_H = 175
 
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
@@ -24,7 +24,6 @@ class HUD:
         self.font_sm = pygame.font.SysFont('consolas', 16)
         self._blink_t   = 0.0
         self._blink_vis = True
-        # Pre-build semi-transparent panel surface
         self._panel = pygame.Surface((self.PANEL_W, self.PANEL_H), pygame.SRCALPHA)
         self._panel.fill((0, 0, 0, 170))
 
@@ -45,7 +44,7 @@ class HUD:
         return RED
 
     def draw(self, vR: float, steer_deg: float, hitch_deg: float,
-             jackknife_warn: bool, jackknife_limit: bool):
+             jackknife_warn: bool, jackknife_limit: bool, ppm: float = 40.0):
         sx, sy = 12, 12
         self.screen.blit(self._panel, (sx, sy))
 
@@ -66,6 +65,12 @@ class HUD:
         surf = self.font_md.render(f"Hitch : {hitch_deg:+6.1f} deg", True, hc)
         self.screen.blit(surf, (px, py))
         py += 28
+
+        # Zoom level
+        zoom_x = ppm / 40.0
+        surf = self.font_md.render(f"Zoom  :  {zoom_x:5.2f}x  (scroll)", True, GRAY)
+        self.screen.blit(surf, (px, py))
+        py += 26
 
         # Status
         if jackknife_limit:

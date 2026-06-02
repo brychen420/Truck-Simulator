@@ -164,16 +164,16 @@ class SettingsScreen:
         y += 25
         self.s_L   = S(y, 1.0, 5.0, c.L,            'Wheelbase  L',          'm'); y += rh
         self.s_LH  = S(y, 0.2, 2.5, c.LH,           'Rear Axle → Hitch  LH', 'm'); y += rh
-        self.s_TrL = S(y, 3.0, 9.0, c.truck_length, 'Truck Length',           'm'); y += rh
-        self.s_TrW = S(y, 1.0, 3.0, c.truck_width,  'Truck Width',            'm'); y += rh
+        self.s_TrL = S(y, 3.0, 6.0, c.truck_length, 'Truck Length',           'm'); y += rh
+        self.s_TrW = S(y, 1.5, 4.0, c.truck_width,  'Truck Width',            'm'); y += rh
         y += 14
 
         # ── Trailer / Cargo section ────────────────────────────────────────────
         self._sec_labels.append((y, '▸ Trailer / Cargo'))
         y += 25
         self.s_LT  = S(y, 0.5, 4.5, c.LT,             'Trailer Axle → Hitch LT', 'm'); y += rh
-        self.s_TlL = S(y, 2.0, 9.0, c.trailer_length, 'Trailer Length',           'm'); y += rh
-        self.s_TlW = S(y, 1.0, 3.0, c.trailer_width,  'Trailer Width',            'm'); y += rh
+        self.s_TlL = S(y, 2.0, 15.0, c.trailer_length, 'Trailer Length',           'm'); y += rh
+        self.s_TlW = S(y, 1.5, 4.0, c.trailer_width,  'Trailer Width',            'm'); y += rh
         y += 14
 
         # ── Physics section ────────────────────────────────────────────────────

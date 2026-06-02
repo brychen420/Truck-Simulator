@@ -36,6 +36,10 @@ def _rect_corners(cx: float, cy: float, yaw: float, length: float, width: float)
 
 
 class Renderer:
+    _PPM_MIN = 5.0
+    _PPM_MAX = 300.0
+    _ZOOM_STEP = 1.15   # multiply/divide per scroll tick
+
     def __init__(self, screen: pygame.Surface, truck_cfg: TruckConfig, sim_cfg: SimConfig):
         self.screen    = screen
         self.tcfg      = truck_cfg
@@ -44,14 +48,21 @@ class Renderer:
         self.cam_y     = 0.0
         self.screen_cx = sim_cfg.window_w / 2
         self.screen_cy = sim_cfg.window_h / 2
+        self.ppm       = sim_cfg.pixels_per_m   # mutable zoom level (px per metre)
+
+    def adjust_zoom(self, scroll_y: int):
+        """scroll_y > 0 = wheel up = zoom in; < 0 = wheel down = zoom out."""
+        if scroll_y > 0:
+            self.ppm = min(self.ppm * self._ZOOM_STEP, self._PPM_MAX)
+        elif scroll_y < 0:
+            self.ppm = max(self.ppm / self._ZOOM_STEP, self._PPM_MIN)
 
     # ── Coordinate conversion ───────────────────────────────────
 
     def w2s(self, xw: float, yw: float) -> tuple:
         """World → screen coordinates (y-axis flipped)."""
-        ppm = self.scfg.pixels_per_m
-        sx  = (xw - self.cam_x) * ppm + self.screen_cx
-        sy  = self.screen_cy - (yw - self.cam_y) * ppm
+        sx  = (xw - self.cam_x) * self.ppm + self.screen_cx
+        sy  = self.screen_cy - (yw - self.cam_y) * self.ppm
         return int(sx), int(sy)
 
     def _update_camera(self, state: TruckTrailerState):
@@ -61,7 +72,7 @@ class Renderer:
     # ── Sub-draw routines ───────────────────────────────────────
 
     def _draw_grid(self):
-        ppm     = self.scfg.pixels_per_m
+        ppm     = self.ppm
         spacing = self.scfg.grid_spacing
         W, H    = self.scfg.window_w, self.scfg.window_h
 

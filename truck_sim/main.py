@@ -37,6 +37,8 @@ def main():
         for event in pygame.event.get():
             if event.type == QUIT:
                 running = False
+            if event.type == pygame.MOUSEWHEEL:
+                ren.adjust_zoom(event.y)
             if event.type == KEYDOWN:
                 if event.key == K_ESCAPE:
                     running = False
@@ -52,14 +54,14 @@ def main():
         jk_limit      = abs(hitch_deg) >= sim_cfg.jackknife_limit_deg
 
         # Hard jackknife lock: freeze motion until driver corrects
-        if jk_limit:
-            vR = 0.0
+        # if jk_limit:
+        #     vR = 0.0
 
         state = kin.step(state, delta_f, vR, dt)
         hud.update(dt)
 
         ren.draw(state, delta_f, vR, jk_warn, jk_limit)
-        hud.draw(vR, math.degrees(delta_f), hitch_deg, jk_warn, jk_limit)
+        hud.draw(vR, math.degrees(delta_f), hitch_deg, jk_warn, jk_limit, ren.ppm)
 
         pygame.display.flip()
 
