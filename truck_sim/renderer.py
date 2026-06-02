@@ -49,6 +49,8 @@ class Renderer:
         self.screen_cx = sim_cfg.window_w / 2
         self.screen_cy = sim_cfg.window_h / 2
         self.ppm       = sim_cfg.pixels_per_m   # mutable zoom level (px per metre)
+        self._park_font = pygame.font.SysFont('consolas', 22, bold=True)
+        self._dist_font = pygame.font.SysFont('consolas', 14, bold=True)
 
     def adjust_zoom(self, scroll_y: int):
         """scroll_y > 0 = wheel up = zoom in; < 0 = wheel down = zoom out."""
@@ -179,6 +181,110 @@ class Renderer:
         s1 = self.w2s(tip_x, tip_y)
         pygame.draw.line(self.screen, WHEEL_COLOR, s0, s1, 3)
         pygame.draw.circle(self.screen, WHEEL_COLOR, s0, 5)
+
+    # ── Parking ─────────────────────────────────────────────────
+
+    def _dashed_line(self, p1, p2, color, dash=8, gap=6, lw=2):
+        dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+        dist = math.hypot(dx, dy)
+        if dist < 1:
+            return
+        step = dash + gap
+        steps = int(dist / step) + 1
+        for i in range(steps):
+            t1 = min((i * step) / dist, 1.0)
+            t2 = min((i * step + dash) / dist, 1.0)
+            s1 = (int(p1[0] + dx * t1), int(p1[1] + dy * t1))
+            s2 = (int(p1[0] + dx * t2), int(p1[1] + dy * t2))
+            pygame.draw.line(self.screen, color, s1, s2, lw)
+
+    def draw_parking_spot(self, spot, is_parked: bool, inside: bool):
+        """Draw the parking spot rectangle with status colour coding."""
+        corners_s = [self.w2s(x, y) for x, y in spot.corners()]
+
+        # Semi-transparent fill via a temporary surface
+        if is_parked:
+            fill_col, alpha = (40, 200, 40),  80
+            border_col = (80, 255, 80)
+        elif inside:
+            fill_col, alpha = (220, 200, 30), 55
+            border_col = (255, 230, 50)
+        else:
+            fill_col, alpha = (220, 210, 50), 18
+            border_col = (220, 210, 60)
+
+        xs = [p[0] for p in corners_s]
+        ys = [p[1] for p in corners_s]
+        bx, by = min(xs), min(ys)
+        bw = max(1, max(xs) - bx + 1)
+        bh = max(1, max(ys) - by + 1)
+        tmp = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        tmp.fill((0, 0, 0, 0))
+        shifted = [(p[0] - bx, p[1] - by) for p in corners_s]
+        pygame.draw.polygon(tmp, (*fill_col, alpha), shifted)
+        self.screen.blit(tmp, (bx, by))
+
+        # Dashed border
+        n = len(corners_s)
+        for i in range(n):
+            self._dashed_line(corners_s[i], corners_s[(i + 1) % n],
+                              border_col, dash=10, gap=6, lw=2)
+
+        # Corner markers
+        for cx, cy in corners_s:
+            pygame.draw.circle(self.screen, border_col, (cx, cy), 4)
+
+        # Centre "P" label
+        sx, sy = self.w2s(spot.x, spot.y)
+        s = self._park_font.render('P', True, border_col)
+        self.screen.blit(s, (sx - s.get_width() // 2, sy - s.get_height() // 2))
+
+    def draw_parking_arrow(self, spot, dist_m: float):
+        """Screen-edge red triangle + distance text when the spot is off-screen."""
+        W, H = self.scfg.window_w, self.scfg.window_h
+        sx, sy = self.w2s(spot.x, spot.y)
+
+        MARGIN = 60
+        on_screen = (MARGIN <= sx <= W - MARGIN and MARGIN <= sy <= H - MARGIN)
+        if on_screen:
+            return
+
+        # Direction from screen centre toward spot's screen position
+        cx, cy = W / 2, H / 2
+        dx, dy = sx - cx, sy - cy
+        d = math.hypot(dx, dy)
+        if d < 1:
+            return
+        ndx, ndy = dx / d, dy / d
+
+        # Clamp arrow tip to screen edge (with margin)
+        ts = []
+        if ndx > 0:  ts.append((W - MARGIN - cx) / ndx)
+        elif ndx < 0: ts.append((MARGIN - cx) / ndx)
+        if ndy > 0:  ts.append((H - MARGIN - cy) / ndy)
+        elif ndy < 0: ts.append((MARGIN - cy) / ndy)
+        if not ts:
+            return
+        t = min(t for t in ts if t > 0)
+        ax, ay = int(cx + ndx * t), int(cy + ndy * t)
+
+        # Triangle
+        ARR = 20
+        px, py = -ndy, ndx   # perpendicular
+        tip  = (ax, ay)
+        bl   = (int(ax - ndx * ARR + px * 10), int(ay - ndy * ARR + py * 10))
+        br   = (int(ax - ndx * ARR - px * 10), int(ay - ndy * ARR - py * 10))
+        pygame.draw.polygon(self.screen, (210, 35, 35),   [tip, bl, br])
+        pygame.draw.polygon(self.screen, (255, 140, 140), [tip, bl, br], 2)
+
+        # Distance label next to arrow
+        label = f'{dist_m:.0f} m'
+        s = self._dist_font.render(label, True, (255, 180, 180))
+        # Offset text away from the screen edge
+        off_x = int(-ndx * (ARR + 10 + s.get_width() // 2))
+        off_y = int(-ndy * (ARR + 10 + s.get_height() // 2))
+        self.screen.blit(s, (ax + off_x - s.get_width() // 2,
+                              ay + off_y - s.get_height() // 2))
 
     # ── Public API ──────────────────────────────────────────────
 

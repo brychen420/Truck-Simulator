@@ -125,6 +125,41 @@ class _Btn:
                 and self.rect.collidepoint(ev.pos))
 
 
+# ── Checkbox ─────────────────────────────────────────────────────────────────
+
+class Checkbox:
+    SIZE = 22
+
+    def __init__(self, x: int, y: int, label: str, checked: bool = False):
+        self.rect    = pygame.Rect(x, y, self.SIZE, self.SIZE)
+        self.label   = label
+        self.checked = checked
+
+    def handle_event(self, ev):
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            if self.rect.collidepoint(ev.pos):
+                self.checked = not self.checked
+
+    def draw(self, surf: pygame.Surface, font: pygame.font.Font,
+             col=(210, 210, 210)):
+        # Box
+        pygame.draw.rect(surf, (52, 52, 52), self.rect)
+        pygame.draw.rect(surf, (155, 155, 155), self.rect, 2, border_radius=3)
+        # Checkmark
+        if self.checked:
+            m = 4
+            pts = [
+                (self.rect.x + m,              self.rect.y + self.SIZE // 2),
+                (self.rect.x + self.SIZE // 3, self.rect.y + self.SIZE - m),
+                (self.rect.x + self.SIZE - m,  self.rect.y + m),
+            ]
+            pygame.draw.lines(surf, (80, 215, 80), False, pts, 3)
+        # Label
+        s = font.render(self.label, True, col)
+        surf.blit(s, (self.rect.right + 10,
+                      self.rect.y + (self.SIZE - s.get_height()) // 2))
+
+
 # ── Settings screen ───────────────────────────────────────────────────────────
 
 class SettingsScreen:
@@ -188,8 +223,14 @@ class SettingsScreen:
             self.s_steer, self.s_speed,
         ]
 
+        # ── Parking challenge checkbox ─────────────────────────────────────────
+        y += 16
+        self.cb_parking = Checkbox(tx - 10, y, 'Enable Parking Challenge',
+                                   checked=False)
+        y += Checkbox.SIZE + 10
+
         # Buttons
-        btn_y = y + 16
+        btn_y = y + 10
         self.btn_rst = _Btn(tx,            btn_y, 215, 44, 'Reset Defaults',
                             C['btn_rst'],  C['btn_rst_h'])
         self.btn_go  = _Btn(tx + tw - 270, btn_y, 270, 44, 'Start Simulation ▶',
@@ -316,6 +357,9 @@ class SettingsScreen:
         for sl in self.sliders:
             sl.draw(self.screen, self.f_lbl, self.f_val, self.LBL_X, self.VAL_X)
 
+        # Parking checkbox
+        self.cb_parking.draw(self.screen, self.f_lbl)
+
         # Buttons
         self.btn_rst.draw(self.screen, self.f_btn, mpos)
         self.btn_go.draw(self.screen, self.f_btn, mpos)
@@ -332,7 +376,7 @@ class SettingsScreen:
 
     # ── Event loop ────────────────────────────────────────────────────────────
 
-    def run(self) -> TruckConfig:
+    def run(self) -> tuple:
         clock = pygame.time.Clock()
         while True:
             clock.tick(60)
@@ -342,20 +386,21 @@ class SettingsScreen:
                     raise SystemExit
                 if ev.type == pygame.KEYDOWN:
                     if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        return self._build_cfg()
+                        return self._build_cfg(), self.cb_parking.checked
                     if ev.key == pygame.K_ESCAPE:
                         pygame.quit()
                         raise SystemExit
                 if self.btn_go.clicked(ev):
-                    return self._build_cfg()
+                    return self._build_cfg(), self.cb_parking.checked
                 if self.btn_rst.clicked(ev):
                     for sl in self.sliders:
                         sl.reset()
+                self.cb_parking.handle_event(ev)
                 for sl in self.sliders:
                     sl.handle_event(ev)
             self._draw()
 
 
-def run_settings(screen: pygame.Surface, default_cfg: TruckConfig) -> TruckConfig:
-    """Show the settings screen and return the user-configured TruckConfig."""
+def run_settings(screen: pygame.Surface, default_cfg: TruckConfig) -> tuple:
+    """Show the settings screen and return (TruckConfig, parking_enabled)."""
     return SettingsScreen(screen, default_cfg).run()
