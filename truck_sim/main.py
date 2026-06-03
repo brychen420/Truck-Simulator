@@ -121,8 +121,6 @@ def main():
                         ap_mode = APMode.PLANNING
                         ap_path_states = []
                     elif ap_mode in (APMode.DONE, APMode.FAILED):
-                        assert scene is not None
-                        state = _make_initial_state(scene, truck_cfg)
                         handler.reset()
                         planner.start(state)
                         ap_mode = APMode.PLANNING
