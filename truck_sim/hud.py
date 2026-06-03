@@ -143,7 +143,7 @@ class HUD:
         mode: 'planning' | 'executing' | 'done' | 'failed'
         """
         W, H = self.screen.get_width(), self.screen.get_height()
-        pw, ph = 280, 64
+        pw, ph = 360, 64
         px = W - pw - 12
         py = H - ph - 38
 
@@ -187,3 +187,46 @@ class HUD:
         elif mode == 'failed':
             hint = self.font_sm.render('P: re-plan   WASD: manual', True, GRAY)
             self.screen.blit(hint, (px + 8, py + 36))
+
+    def draw_frame(self, vR: float, steer_deg: float, hitch_deg: float,
+                   jk_warn: bool, jk_limit: bool, ppm: float,
+                   aps=None, autopark_enabled: bool = False,
+                   parking=None, state=None):
+        """Single HUD call per frame — gauges + all conditional overlays.
+
+        aps: AutoParkState | None
+        parking: ParkingManager | None
+        state: TruckTrailerState | None  (needed for parking distance)
+        """
+        from autopark_state import APMode  # local import to avoid circular dependency
+        from parking import ParkingManager
+
+        self.draw(vR, steer_deg, hitch_deg, jk_warn, jk_limit, ppm)
+
+        if autopark_enabled and aps is not None:
+            if aps.mode == APMode.PLANNING:
+                self.draw_autopark_overlay()
+                self.draw_autopark_hud('planning')
+            elif aps.mode == APMode.EXECUTING and aps.ctrl is not None:
+                self.draw_autopark_hud('executing',
+                                       aps.ctrl.current_step,
+                                       aps.ctrl.total_steps)
+            elif aps.mode == APMode.DONE:
+                self.draw_autopark_hud('done')
+            elif aps.mode == APMode.FAILED:
+                self.draw_autopark_hud('failed')
+
+            if aps.mode == APMode.MANUAL:
+                hint_surf = self.font_sm.render('Press P to start auto-park',
+                                                True, (160, 160, 160))
+                W = self.screen.get_width()
+                self.screen.blit(hint_surf,
+                                 hint_surf.get_rect(center=(W // 2,
+                                                            self.screen.get_height() - 26)))
+
+        if parking is not None and state is not None:
+            self.draw_parking_hud(parking.distance_to(state), parking.success_count)
+            if parking.is_parked:
+                self.draw_parking_success(parking.success_count,
+                                          parking.success_timer,
+                                          ParkingManager.SUCCESS_HOLD)

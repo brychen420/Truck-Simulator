@@ -396,3 +396,32 @@ class Renderer:
 
         # Layer 6: front wheel direction indicator
         self._draw_wheel_indicator(state, delta_f)
+
+    def draw_frame(self, state: TruckTrailerState, delta_f: float, vR: float,
+                   jk_warn: bool, jk_limit: bool,
+                   aps=None, scene=None, parking=None):
+        """Single render call per frame — vehicle + optional scene/parking overlays.
+
+        aps: AutoParkState | None
+        scene: AutoParkScene | None
+        parking: ParkingManager | None
+        """
+        from autopark_state import APMode  # local import to avoid circular dependency
+
+        self.draw(state, delta_f, vR, jk_warn, jk_limit)
+
+        # Auto-park scene
+        if scene is not None:
+            self.draw_scene_walls(scene)
+            if aps is not None and aps.path_states:
+                self.draw_planned_path(aps.path_states, self.tcfg)
+            self.draw_parking_spot(scene.spot,
+                                   is_parked=(aps is not None and aps.mode == APMode.DONE),
+                                   inside=False)
+
+        # Random parking challenge
+        if parking is not None:
+            inside = parking.vehicle_inside(state)
+            self.draw_parking_spot(parking.spot, parking.is_parked, inside)
+            if not parking.is_parked:
+                self.draw_parking_arrow(parking.spot, parking.distance_to(state))
