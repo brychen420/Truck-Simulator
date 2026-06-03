@@ -140,7 +140,7 @@ def main():
         if ap_mode == APMode.PLANNING and planner and planner.is_done:
             path = planner.result
             if path:
-                ap_ctrl = AutoParkController(path)
+                ap_ctrl = AutoParkController(path, state, kin)
                 ap_path_states = replay_path(state, path, truck_cfg, sample_every=5)
                 ap_mode = APMode.EXECUTING
             else:
@@ -156,18 +156,17 @@ def main():
             ap_ctrl = None
             ap_mode = APMode.DONE
 
-        # ── Control input ─────────────────────────────────────────────────────
+        # ── Control input + Physics ───────────────────────────────────────────
         if ap_mode == APMode.EXECUTING and ap_ctrl is not None:
-            delta_f, vR = ap_ctrl.update(dt)
+            # Controller owns state: pre-computed RK4 states, no Euler drift
+            state, delta_f, vR = ap_ctrl.update(dt)
         else:
             delta_f, vR = handler.update(keys, dt)
+            state = kin.step(state, delta_f, vR, dt)
 
-        # ── Physics ───────────────────────────────────────────────────────────
         hitch_deg = state.hitch_angle_deg
         jk_warn   = abs(hitch_deg) >= sim_cfg.jackknife_warn_deg
         jk_limit  = abs(hitch_deg) >= sim_cfg.jackknife_limit_deg
-
-        state = kin.step(state, delta_f, vR, dt)
         hud.update(dt)
 
         if parking is not None:
