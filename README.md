@@ -1,17 +1,18 @@
 # EuroTruck 3.0 — 2D Kinematic Truck-Trailer Simulator
 
-A real-time 2D driving simulation of an articulated truck and trailer, implemented in Python and pygame. Vehicle dynamics are derived directly from the kinematic model in Cao et al. (2026), using forward Euler integration to update the full 6-DOF state at every tick.
+A real-time 2D driving simulation of an articulated truck and trailer, implemented in Python and pygame. Vehicle dynamics follow the kinematic model in Cao et al., using RK4 integration. Includes a full Hybrid A* auto-parking planner with inverse kinematics.
 
 ---
 
 ## Features
 
-- **Paper-accurate kinematics** — equations (1)–(6) govern truck heading, trailer heading, and hitch-point constraint
-- **Pre-simulation setup screen** — adjust all vehicle geometry with sliders; a live top-down preview updates in real time; optional parking challenge toggle
-- **WASD driving** — throttle and steering with realistic inertia and steering auto-centering
+- **Paper-accurate kinematics** — equations (1)–(6) govern truck heading, trailer heading, and hitch-point constraint; integrated with RK4
+- **Pre-simulation setup screen** — adjust all vehicle geometry with sliders; live top-down preview updates in real time
+- **WASD driving** — throttle and steering with realistic inertia and auto-centering
 - **Mouse scroll wheel zoom** — zoom in/out during simulation; current scale shown in HUD
-- **Jackknife detection** — color-coded HUD: warning at 60°, speed lock at 85° articulation angle
+- **Jackknife detection** — color-coded HUD: warning at 60°, limit at 85° articulation angle
 - **Parking challenge mode** — randomly spawned parking spot with screen-edge direction arrow and success detection
+- **Hybrid A\* auto-parking** — full 4D planner (trailer-centric state space) with inverse kinematics; ghost path visualization; configurable planning time step
 
 ---
 
@@ -31,7 +32,7 @@ State vector (6 variables):
 | `ψ₂` | Trailer yaw angle (rad) |
 | `Δψ = ψ₁ − ψ₂` | Articulation (hitch) angle |
 
-Control inputs `(δf, VR)` map directly to WASD.
+Control inputs `(δf, VR)` — front-wheel steer angle and rear-axle speed.
 
 **Truck dynamics (eqs. 1–3):**
 ```
@@ -47,13 +48,11 @@ Control inputs `(δf, VR)` map directly to WASD.
 ψ̇₂ = VR / LT · [sin(Δψ) − (LH/L) · cos(Δψ) · tan(δf)]
 ```
 
-Integration uses Euler (dt = 1/60 s). A drop-in `step_rk4()` is available in `kinematics.py` for higher accuracy.
+Integration uses RK4 (dt = 1/60 s).
 
 ---
 
 ## Default Vehicle Parameters
-
-From paper Table 2 / Table 5:
 
 | Parameter | Symbol | Default |
 |-----------|--------|---------|
@@ -88,7 +87,7 @@ cd truck_sim
 python main.py
 ```
 
-The settings screen opens first. Adjust sliders, optionally enable the parking challenge, then press **Enter** or **Start Simulation ▶**.
+The settings screen opens first. Adjust sliders, optionally enable a mode, then press **Enter** or **Start Simulation ▶**.
 
 ---
 
@@ -100,12 +99,14 @@ The settings screen opens first. Adjust sliders, optionally enable the parking c
 |--------|--------|
 | Drag slider | Adjust parameter; live preview updates instantly |
 | Click anywhere on track | Jump slider to that value |
-| `[ ] Enable Parking Challenge` | Toggle parking mode for this run |
+| `[ ] Enable Parking Challenge` | Toggle random parking challenge mode |
+| `[ ] Enable Auto-Park Scene` | Toggle Hybrid A\* auto-parking mode; reveals A\* Time Step slider |
+| A\* Time Step slider | Set planning sub-step size (0.017 s – 0.200 s); smaller = more accurate but slower to plan |
 | `Reset Defaults` | Restore all sliders to paper values |
 | `Enter` / **▶** | Start simulation |
 | `Esc` | Quit |
 
-### Simulation
+### Simulation — Manual
 
 | Key / Input | Action |
 |-------------|--------|
@@ -114,8 +115,18 @@ The settings screen opens first. Adjust sliders, optionally enable the parking c
 | `A` | Steer left |
 | `D` | Steer right |
 | Scroll wheel ↑ / ↓ | Zoom in / out (5–300 px/m) |
-| `R` | Reset vehicle to initial state |
+| `R` | Reset vehicle to initial position |
 | `Esc` | Quit |
+
+### Simulation — Auto-Park Mode
+
+| Key | Action |
+|-----|--------|
+| `P` | Start planning (from MANUAL or DONE/FAILED state) |
+| `Esc` | Cancel planning / abort execution → return to manual |
+| `W` / `S` / `A` / `D` | Abort execution mid-path → return to manual |
+| `L` | Replay last planned path from the start position |
+| `R` | Reset vehicle to scene start position |
 
 Releasing `W`/`S` applies rolling friction. Releasing `A`/`D` auto-centers the steering wheel.
 
@@ -131,7 +142,7 @@ Releasing `W`/`S` applies rolling friction. Releasing `A`/`D` auto-centers the s
 | Steer | Front-wheel angle `δf` in degrees |
 | Hitch | Articulation angle `Δψ` in degrees, color-coded |
 | Zoom | Current scale relative to default (1.00×) |
-| State | `NORMAL` / `WARNING` / `JACKKNIFE` |
+| State | `NORMAL` / `WARNING` / `!!! JACKKNIFE !!!` |
 
 Hitch angle color scale:
 
@@ -149,33 +160,62 @@ Hitch angle color scale:
 | Park | Distance to parking spot centre (m) |
 | Parked | Number of successful parks this session |
 
+### Auto-park panel (bottom-right, auto-park mode only)
+
+| State | Display |
+|-------|---------|
+| Planning | Yellow text + animated dots; full-screen dark overlay |
+| Executing | Blue text with step counter and progress bar |
+| Done | Green "Parked!" text; `L: replay  P: re-plan` hints |
+| Failed | Red "No path found" text |
+
 ---
 
 ## Parking Challenge
 
-Enable **Parking Challenge** in the settings screen to activate this mode.
+Enable **Parking Challenge** in the settings screen.
 
-**Spot generation**
-- Spawns 30–65 m from the vehicle at a random angle, snapped to the 5 m world grid
-- Orientation is 0° or 90° (axis-aligned), chosen randomly each spawn
-- Size: `(truck_length + trailer_length + 2.5 m) × (max_width + 1.5 m)`
+- Spot spawns 30–65 m away at a random angle, snapped to the 5 m world grid
+- When the spot is off-screen: a red triangle arrow appears on the screen edge with distance in metres
+- **Success condition**: all 8 body corners inside the spot **and** speed ≤ 0.5 m/s
+- On success, a **PARKED!** banner appears for 3 seconds, then a new spot spawns
 
-**Direction indicator**
-- When the spot is **off-screen**: a red triangle arrow appears on the screen edge pointing toward the spot, with the distance in metres
-- When the spot is **on-screen**: the arrow disappears; the spot outline is directly visible
+---
 
-**Parking spot colours**
+## Auto-Park Mode (Hybrid A*)
 
-| State | Border | Fill |
-|-------|--------|------|
-| Default | Dashed yellow | Faint yellow |
-| Vehicle partially inside | Bright yellow | Light yellow |
-| Parked (success) | Solid green | Semi-transparent green |
+Enable **Auto-Park Scene** in the settings screen.
 
-**Success condition**
-All 8 body corners of the truck+trailer are inside the spot **and** speed ≤ 0.5 m/s.
+The vehicle starts outside a fixed perpendicular parking alley. Press `P` to run the planner in a background thread; the simulation remains interactive during planning.
 
-On success, a **PARKED!** banner appears at the screen centre for 3 seconds, then a new spot spawns.
+### Planner
+
+| Property | Value |
+|----------|-------|
+| State space | 4D trailer-centric `(xT, yT, ψ₂, Δψ)` |
+| Controls | Virtual trailer steer δT × forward/reverse, converted to `(δf, VR)` via inverse kinematics |
+| Integration | RK4, configurable sub-steps per node |
+| Jackknife limit | \|Δψ\| ≤ 55° during planning |
+| Adaptive δT range | Per-node feasible steer range derived from paper §4.3 Eqs. 15–16 |
+| Goal tolerance | xy < 0.8 m, ψ₂ < 15°, Δψ < 10° |
+
+### A\* Time Step Slider
+
+Controls the sub-step size `DT_SUB` (and consequently `N_SUB = 1 / DT_SUB`):
+
+| Setting | DT_SUB | N_SUB | Planning speed |
+|---------|--------|-------|----------------|
+| Fast end | 0.200 s | 5 | ~12× faster |
+| Default | 0.017 s | 60 | Matches simulation frame rate exactly — zero integration mismatch |
+
+Smaller DT_SUB produces a planned path that matches execution more faithfully but takes longer to compute.
+
+### Ghost Path Visualization
+
+Once a path is found, ghost outlines are drawn along the planned trajectory:
+- **Blue** outlines — truck
+- **Orange** outlines — trailer
+- Thin connector lines show the hitch linkage at each sampled pose
 
 ---
 
@@ -184,31 +224,33 @@ On success, a **PARKED!** banner appears at the screen centre for 3 seconds, the
 ```
 EuroTruck3.0/
 ├── requirements.txt
-├── TRUCK_SIM_PLAN.md          # Original design document
 └── truck_sim/
-    ├── main.py                # Entry point and main loop
-    ├── config.py              # TruckConfig / SimConfig dataclasses
-    ├── kinematics.py          # State vector, Euler and RK4 integrators
-    ├── input_handler.py       # WASD input with inertia model
-    ├── settings_screen.py     # Pre-simulation slider UI + parking toggle
-    ├── renderer.py            # pygame rendering: grid, bodies, parking, zoom
-    ├── hud.py                 # Overlay dashboard and parking banners
-    └── parking.py             # Parking spot geometry, spawning, success detection
+    ├── main.py                  # Entry point — thin main loop, delegates to modules
+    ├── config.py                # TruckConfig / SimConfig dataclasses
+    ├── kinematics.py            # State vector, RK4 integrator, hitch geometry
+    ├── input_handler.py         # WASD input with inertia model
+    ├── settings_screen.py       # Pre-simulation slider UI
+    ├── renderer.py              # pygame rendering: grid, bodies, ghost path, parking
+    ├── hud.py                   # Overlay dashboard, auto-park status, parking banners
+    ├── parking.py               # Parking spot geometry, spawning, success detection
+    ├── autopark_scene.py        # Fixed alley scene geometry and goal state
+    ├── autopark_state.py        # APMode enum, AutoParkState, state machine logic
+    ├── hybrid_astar.py          # Hybrid A* planner (background thread)
+    ├── inverse_kinematics.py    # Virtual trailer steer → physical (δf, VR)
+    └── auto_park_controller.py  # Path replay controller (supplies control inputs per frame)
 ```
 
 ---
 
 ## Coordinate Convention
 
-Consistent with the reference paper:
-
 - World frame: +x right, +y up, angles counter-clockwise from +x
 - Screen frame: +x right, +y down (pygame default)
 - Conversion: `screen_y = screen_center_y − world_y × ppm`
-- Initial pose: truck rear axle at world origin, heading along +x
+- Auto-park initial pose: truck rear axle at (−10, 8), heading along +x
 
 ---
 
 ## Reference
 
-Cao et al. (2026). *Kinematic modeling and hybrid A\* path planning for truck-trailer parking.*
+Cao et al. *Hybrid A\*-Based Reverse Path-Planning of a Vehicle with Single Trailer.*
