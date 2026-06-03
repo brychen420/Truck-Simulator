@@ -286,6 +286,73 @@ class Renderer:
         self.screen.blit(s, (ax + off_x - s.get_width() // 2,
                               ay + off_y - s.get_height() // 2))
 
+    # ── Auto-park scene ─────────────────────────────────────────
+
+    def draw_scene_walls(self, scene):
+        """Draw the alley walls as solid dark-gray filled rectangles."""
+        WALL_FILL   = (72, 72, 72)
+        WALL_BORDER = (130, 130, 130)
+
+        hw        = scene.spot.width / 2
+        lwall_x   = -(hw + 0.5)
+        rwall_x   =  (hw + 0.5)
+        bwall_y   = scene.back_wall_y
+        road_y    = 0.0
+        FAR_X     = 42.0    # extends the wall visually beyond the vehicle path
+
+        def draw_rect_w(wx1, wy1, wx2, wy2):
+            s1 = self.w2s(wx1, wy1)
+            s2 = self.w2s(wx2, wy2)
+            rx = min(s1[0], s2[0])
+            ry = min(s1[1], s2[1])
+            rw = max(1, abs(s2[0] - s1[0]))
+            rh = max(1, abs(s2[1] - s1[1]))
+            import pygame as _pg
+            r = _pg.Rect(rx, ry, rw, rh)
+            _pg.draw.rect(self.screen, WALL_FILL,   r)
+            _pg.draw.rect(self.screen, WALL_BORDER, r, 2)
+
+        # Left wall block
+        draw_rect_w(-FAR_X, bwall_y, lwall_x, road_y)
+        # Right wall block
+        draw_rect_w(rwall_x, bwall_y, FAR_X, road_y)
+        # Back wall strip (thin, decorative)
+        draw_rect_w(lwall_x, bwall_y - 0.5, rwall_x, bwall_y)
+
+    def draw_planned_path(self, path_states: list, cfg):
+        """Draw ghost truck+trailer outlines at sampled waypoints along the path.
+
+        path_states : list of TruckTrailerState from hybrid_astar.replay_path()
+        """
+        if not path_states:
+            return
+        import pygame as _pg
+        GHOST = (100, 180, 255)
+        n = len(path_states)
+        for i, state in enumerate(path_states):
+            alpha = int(30 + 120 * i / max(n - 1, 1))
+            color = (
+                int(GHOST[0] * alpha / 150),
+                int(GHOST[1] * alpha / 150),
+                min(255, int(GHOST[2] * alpha / 150)),
+            )
+            # Truck outline
+            tc_off = cfg.truck_length / 2 - cfg.LH
+            tcx = state.xR + tc_off * math.cos(state.psi1)
+            tcy = state.yR + tc_off * math.sin(state.psi1)
+            tk_c = [self.w2s(x, y)
+                    for x, y in _rect_corners(tcx, tcy, state.psi1,
+                                               cfg.truck_length, cfg.truck_width)]
+            _pg.draw.polygon(self.screen, color, tk_c, 1)
+            # Trailer outline
+            tl_off = cfg.LT - cfg.trailer_length / 2
+            tlx = state.xT + tl_off * math.cos(state.psi2)
+            tly = state.yT + tl_off * math.sin(state.psi2)
+            tl_c = [self.w2s(x, y)
+                    for x, y in _rect_corners(tlx, tly, state.psi2,
+                                               cfg.trailer_length, cfg.trailer_width)]
+            _pg.draw.polygon(self.screen, color, tl_c, 1)
+
     # ── Public API ──────────────────────────────────────────────
 
     def draw(self, state: TruckTrailerState, delta_f: float, vR: float,

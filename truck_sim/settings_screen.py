@@ -223,14 +223,19 @@ class SettingsScreen:
             self.s_steer, self.s_speed,
         ]
 
-        # ── Parking challenge checkbox ─────────────────────────────────────────
+        # ── Mode checkboxes ────────────────────────────────────────────────────
         y += 16
-        self.cb_parking = Checkbox(tx - 10, y, 'Enable Parking Challenge',
-                                   checked=False)
+        self.cb_parking  = Checkbox(tx - 10, y,
+                                    'Enable Parking Challenge',
+                                    checked=False)
+        y += Checkbox.SIZE + 8
+        self.cb_autopark = Checkbox(tx - 10, y,
+                                    'Enable Auto-Park Scene  (Hybrid A*)',
+                                    checked=False)
         y += Checkbox.SIZE + 10
 
         # Buttons
-        btn_y = y + 10
+        btn_y = min(y + 10, 660)   # cap so buttons never fall off 720-px window
         self.btn_rst = _Btn(tx,            btn_y, 215, 44, 'Reset Defaults',
                             C['btn_rst'],  C['btn_rst_h'])
         self.btn_go  = _Btn(tx + tw - 270, btn_y, 270, 44, 'Start Simulation ▶',
@@ -357,8 +362,9 @@ class SettingsScreen:
         for sl in self.sliders:
             sl.draw(self.screen, self.f_lbl, self.f_val, self.LBL_X, self.VAL_X)
 
-        # Parking checkbox
+        # Mode checkboxes
         self.cb_parking.draw(self.screen, self.f_lbl)
+        self.cb_autopark.draw(self.screen, self.f_lbl)
 
         # Buttons
         self.btn_rst.draw(self.screen, self.f_btn, mpos)
@@ -386,21 +392,29 @@ class SettingsScreen:
                     raise SystemExit
                 if ev.type == pygame.KEYDOWN:
                     if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        return self._build_cfg(), self.cb_parking.checked
+                        return self._build_cfg(), self.cb_parking.checked, self.cb_autopark.checked
                     if ev.key == pygame.K_ESCAPE:
                         pygame.quit()
                         raise SystemExit
                 if self.btn_go.clicked(ev):
-                    return self._build_cfg(), self.cb_parking.checked
+                    return self._build_cfg(), self.cb_parking.checked, self.cb_autopark.checked
                 if self.btn_rst.clicked(ev):
                     for sl in self.sliders:
                         sl.reset()
+                # Checkboxes — handle then enforce mutual exclusion
+                prev_park = self.cb_parking.checked
+                prev_auto = self.cb_autopark.checked
                 self.cb_parking.handle_event(ev)
+                self.cb_autopark.handle_event(ev)
+                if self.cb_parking.checked and not prev_park:
+                    self.cb_autopark.checked = False
+                elif self.cb_autopark.checked and not prev_auto:
+                    self.cb_parking.checked = False
                 for sl in self.sliders:
                     sl.handle_event(ev)
             self._draw()
 
 
 def run_settings(screen: pygame.Surface, default_cfg: TruckConfig) -> tuple:
-    """Show the settings screen and return (TruckConfig, parking_enabled)."""
+    """Show the settings screen and return (TruckConfig, parking_enabled, autopark_enabled)."""
     return SettingsScreen(screen, default_cfg).run()

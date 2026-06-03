@@ -122,3 +122,65 @@ class HUD:
         cnt_surf  = self.font_sm.render(f'Parked: {count}',        True, GRAY)
         self.screen.blit(dist_surf, (px + 8, py + 5))
         self.screen.blit(cnt_surf,  (px + 8, py + 30))
+
+    # ── Auto-park overlay ──────────────────────────────────────────────────
+
+    def draw_autopark_overlay(self):
+        """Dark full-screen overlay with 'PLANNING…' text during A* search."""
+        W, H = self.screen.get_width(), self.screen.get_height()
+        overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 120))
+        self.screen.blit(overlay, (0, 0))
+        dots = '.' * (1 + int(self._blink_t * 6) % 4)
+        surf = self.font_lg.render(f'PLANNING PATH{dots}', True, (255, 220, 70))
+        self.screen.blit(surf, surf.get_rect(center=(W // 2, H // 2 - 18)))
+        hint = self.font_sm.render('Press Esc to cancel', True, (180, 180, 180))
+        self.screen.blit(hint, hint.get_rect(center=(W // 2, H // 2 + 26)))
+
+    def draw_autopark_hud(self, mode: str, step: int = 0, total: int = 0):
+        """Bottom-right status panel for auto-park mode.
+
+        mode: 'planning' | 'executing' | 'done' | 'failed'
+        """
+        W, H = self.screen.get_width(), self.screen.get_height()
+        pw, ph = 280, 64
+        px = W - pw - 12
+        py = H - ph - 38
+
+        panel = pygame.Surface((pw, ph), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 165))
+        self.screen.blit(panel, (px, py))
+
+        if mode == 'planning':
+            text = 'Auto-Park: planning…'
+            col  = (255, 220, 70)
+        elif mode == 'executing':
+            pct  = int(100 * step / max(total, 1))
+            text = f'Auto-Park: {step}/{total}  ({pct}%)'
+            col  = (80, 210, 255)
+        elif mode == 'done':
+            text = 'Parked!  Press P to re-plan'
+            col  = (80, 255, 80)
+        elif mode == 'failed':
+            text = 'No path found — reposition'
+            col  = (255, 80, 80)
+        else:
+            return
+
+        surf = self.font_sm.render(text, True, col)
+        self.screen.blit(surf, (px + 8, py + 8))
+
+        if mode == 'executing' and total > 0:
+            bar_x = px + 8
+            bar_y = py + 36
+            bar_w = pw - 16
+            bar_h = 10
+            pygame.draw.rect(self.screen, (40, 70, 110),
+                             (bar_x, bar_y, bar_w, bar_h), border_radius=5)
+            filled = max(1, int(bar_w * step / total))
+            pygame.draw.rect(self.screen, (80, 190, 255),
+                             (bar_x, bar_y, filled, bar_h), border_radius=5)
+
+        if mode == 'done' or mode == 'failed':
+            hint = self.font_sm.render('P: re-plan   WASD: manual', True, GRAY)
+            self.screen.blit(hint, (px + 8, py + 36))
