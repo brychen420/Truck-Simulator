@@ -159,7 +159,7 @@ class HUD:
             text = f'Auto-Park: {step}/{total}  ({pct}%)'
             col  = (80, 210, 255)
         elif mode == 'done':
-            text = 'Parked!  Press P to re-plan'
+            text = 'Parked!  L: replay   P: re-plan'
             col  = (80, 255, 80)
         elif mode == 'failed':
             text = 'No path found — reposition'
@@ -181,6 +181,9 @@ class HUD:
             pygame.draw.rect(self.screen, (80, 190, 255),
                              (bar_x, bar_y, filled, bar_h), border_radius=5)
 
-        if mode == 'done' or mode == 'failed':
+        if mode == 'done':
+            hint = self.font_sm.render('L: replay   P: re-plan   WASD: manual', True, GRAY)
+            self.screen.blit(hint, (px + 8, py + 36))
+        elif mode == 'failed':
             hint = self.font_sm.render('P: re-plan   WASD: manual', True, GRAY)
             self.screen.blit(hint, (px + 8, py + 36))

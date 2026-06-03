@@ -2,7 +2,7 @@ import sys
 import math
 import enum
 import pygame
-from pygame.locals import QUIT, KEYDOWN, K_r, K_ESCAPE, K_p, K_w, K_s, K_a, K_d
+from pygame.locals import QUIT, KEYDOWN, K_r, K_ESCAPE, K_p, K_l, K_w, K_s, K_a, K_d
 
 from config import TruckConfig, SimConfig
 from kinematics import TruckTrailerKinematics, TruckTrailerState, initial_state
@@ -69,6 +69,8 @@ def main():
     ap_mode = APMode.MANUAL
     ap_fail_timer  = 0.0
     ap_path_states = []   # ghost waypoints for visualisation
+    ap_path: list  = []   # raw (delta_f, vR, dt) triples — kept for replay
+    ap_start_state: TruckTrailerState | None = None  # vehicle state when P was pressed
 
     # ── Initial vehicle state ─────────────────────────────────────────────────
     if autopark_enabled:
@@ -117,15 +119,22 @@ def main():
 
                 elif event.key == K_p and autopark_enabled and planner is not None:
                     if ap_mode == APMode.MANUAL:
+                        ap_start_state = state
                         planner.start(state)
                         ap_mode = APMode.PLANNING
                         ap_path_states = []
                     elif ap_mode in (APMode.DONE, APMode.FAILED):
                         handler.reset()
+                        ap_start_state = state
                         planner.start(state)
                         ap_mode = APMode.PLANNING
                         ap_ctrl = None
                         ap_path_states = []
+
+                elif event.key == K_l and ap_mode == APMode.DONE and ap_path and ap_start_state is not None and planner is not None:
+                    state  = ap_start_state
+                    ap_ctrl = AutoParkController(ap_path)
+                    ap_mode = APMode.EXECUTING
 
         # ── WASD abort during auto-execution ─────────────────────────────────
         keys = pygame.key.get_pressed()
@@ -138,9 +147,11 @@ def main():
         if ap_mode == APMode.PLANNING and planner and planner.is_done:
             path = planner.result
             if path:
-                ap_ctrl = AutoParkController(path)
-                ap_path_states = replay_path(state, path, truck_cfg, sample_every=5)
-                ap_mode = APMode.EXECUTING
+                ap_path  = path
+                ap_ctrl  = AutoParkController(path)
+                ap_path_states = replay_path(ap_start_state or state, path, truck_cfg,
+                                             sample_every=5, dt_sim=planner.dt_sub)
+                ap_mode  = APMode.EXECUTING
             else:
                 ap_mode = APMode.FAILED
                 ap_fail_timer = 4.0
