@@ -304,17 +304,24 @@ class HybridAstarPlanner:
 def replay_path(start_state: TruckTrailerState,
                 path: list,
                 cfg: TruckConfig,
-                sample_every: int = 5) -> list:
+                sample_every: int = 5,
+                dt_sim: float = 1.0 / 60) -> list:
     """
-    Re-simulate the planned path from start_state using kin.step_rk4().
-    Returns a list of TruckTrailerState sampled every `sample_every` steps.
-    Used by the renderer to draw ghost vehicle outlines.
+    Re-simulate the planned path at simulation frame rate (dt_sim ≈ 0.017 s).
+
+    Each planned step (df, vr, step_dt) is subdivided into fine RK4 sub-steps
+    of dt_sim so the ghost path matches the actual execution trajectory exactly.
+    Returns a list of TruckTrailerState sampled every `sample_every` planned steps.
     """
     kin    = TruckTrailerKinematics(cfg)
     state  = start_state
     states = [state]
-    for i, (df, vr, dt) in enumerate(path):
-        state = kin.step_rk4(state, df, vr, dt)
+    for i, (df, vr, step_dt) in enumerate(path):
+        t_rem = step_dt
+        while t_rem > 1e-9:
+            dt    = min(dt_sim, t_rem)
+            state = kin.step_rk4(state, df, vr, dt)
+            t_rem -= dt
         if (i + 1) % sample_every == 0:
             states.append(state)
     return states

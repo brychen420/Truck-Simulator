@@ -165,7 +165,7 @@ def main():
         jk_warn   = abs(hitch_deg) >= sim_cfg.jackknife_warn_deg
         jk_limit  = abs(hitch_deg) >= sim_cfg.jackknife_limit_deg
 
-        state = kin.step(state, delta_f, vR, dt)
+        state = kin.step_rk4(state, delta_f, vR, dt)
         hud.update(dt)
 
         if parking is not None:

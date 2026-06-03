@@ -322,36 +322,56 @@ class Renderer:
     def draw_planned_path(self, path_states: list, cfg):
         """Draw ghost truck+trailer outlines at sampled waypoints along the path.
 
-        path_states : list of TruckTrailerState from hybrid_astar.replay_path()
+        Truck outline : blue   (100, 180, 255)
+        Trailer outline: orange (255, 160,  50)
+        Hitch connector: thin line  rear-axle → hitch → trailer-axle
         """
         if not path_states:
             return
         import pygame as _pg
-        GHOST = (100, 180, 255)
+        GHOST_T  = (100, 180, 255)   # truck  — blue
+        GHOST_TR = (255, 160,  50)   # trailer — orange
         n = len(path_states)
         for i, state in enumerate(path_states):
             alpha = int(30 + 120 * i / max(n - 1, 1))
-            color = (
-                int(GHOST[0] * alpha / 150),
-                int(GHOST[1] * alpha / 150),
-                min(255, int(GHOST[2] * alpha / 150)),
+            t_col = (
+                int(GHOST_T[0]  * alpha / 150),
+                int(GHOST_T[1]  * alpha / 150),
+                min(255, int(GHOST_T[2]  * alpha / 150)),
             )
-            # Truck outline
+            r_col = (
+                min(255, int(GHOST_TR[0] * alpha / 150)),
+                int(GHOST_TR[1] * alpha / 150),
+                int(GHOST_TR[2] * alpha / 150),
+            )
+
+            # Truck outline (blue)
             tc_off = cfg.truck_length / 2 - cfg.LH
             tcx = state.xR + tc_off * math.cos(state.psi1)
             tcy = state.yR + tc_off * math.sin(state.psi1)
             tk_c = [self.w2s(x, y)
                     for x, y in _rect_corners(tcx, tcy, state.psi1,
                                                cfg.truck_length, cfg.truck_width)]
-            _pg.draw.polygon(self.screen, color, tk_c, 1)
-            # Trailer outline
+            _pg.draw.polygon(self.screen, t_col, tk_c, 1)
+
+            # Trailer outline (orange)
             tl_off = cfg.LT - cfg.trailer_length / 2
             tlx = state.xT + tl_off * math.cos(state.psi2)
             tly = state.yT + tl_off * math.sin(state.psi2)
             tl_c = [self.w2s(x, y)
                     for x, y in _rect_corners(tlx, tly, state.psi2,
                                                cfg.trailer_length, cfg.trailer_width)]
-            _pg.draw.polygon(self.screen, color, tl_c, 1)
+            _pg.draw.polygon(self.screen, r_col, tl_c, 1)
+
+            # Hitch connector: rear-axle → hitch point → trailer-axle
+            xH = state.xR - cfg.LH * math.cos(state.psi1)
+            yH = state.yR - cfg.LH * math.sin(state.psi1)
+            p_rear   = self.w2s(state.xR, state.yR)
+            p_hitch  = self.w2s(xH, yH)
+            p_trail  = self.w2s(state.xT, state.yT)
+            _pg.draw.line(self.screen, t_col, p_rear,  p_hitch, 1)
+            _pg.draw.line(self.screen, r_col, p_hitch, p_trail, 1)
+            _pg.draw.circle(self.screen, (220, 220, 220), p_hitch, 2)
 
     # ── Public API ──────────────────────────────────────────────
 
