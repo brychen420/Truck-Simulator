@@ -50,7 +50,7 @@ def main():
     screen = pygame.display.set_mode((sim_cfg.window_w, sim_cfg.window_h))
 
     # Settings screen returns (TruckConfig, parking_enabled, autopark_enabled)
-    truck_cfg, parking_enabled, autopark_enabled = run_settings(screen, TruckConfig())
+    truck_cfg, parking_enabled, autopark_enabled, ap_n_sub = run_settings(screen, TruckConfig())
 
     clock   = pygame.time.Clock()
     kin     = TruckTrailerKinematics(truck_cfg)
@@ -62,7 +62,7 @@ def main():
     scene = build_scene(truck_cfg) if autopark_enabled else None
     if autopark_enabled:
         assert scene is not None
-        planner: HybridAstarPlanner | None = HybridAstarPlanner(truck_cfg, scene)
+        planner: HybridAstarPlanner | None = HybridAstarPlanner(truck_cfg, scene, n_sub=ap_n_sub)
     else:
         planner = None
     ap_ctrl: AutoParkController | None = None
@@ -155,8 +155,9 @@ def main():
             ap_mode = APMode.DONE
 
         # ── Control input ─────────────────────────────────────────────────────
-        if ap_mode == APMode.EXECUTING and ap_ctrl is not None:
-            delta_f, vR = ap_ctrl.update(dt)
+        if ap_mode == APMode.EXECUTING and ap_ctrl is not None and planner is not None:
+            # Use exact planned dt so execution integrates identically to planning
+            delta_f, vR = ap_ctrl.update(planner.dt_sub)
         else:
             delta_f, vR = handler.update(keys, dt)
 
@@ -165,7 +166,8 @@ def main():
         jk_warn   = abs(hitch_deg) >= sim_cfg.jackknife_warn_deg
         jk_limit  = abs(hitch_deg) >= sim_cfg.jackknife_limit_deg
 
-        state = kin.step_rk4(state, delta_f, vR, dt)
+        phys_dt = planner.dt_sub if (ap_mode == APMode.EXECUTING and ap_ctrl is not None and planner is not None) else dt
+        state = kin.step_rk4(state, delta_f, vR, phys_dt)
         hud.update(dt)
 
         if parking is not None:

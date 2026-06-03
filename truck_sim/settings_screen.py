@@ -234,15 +234,24 @@ class SettingsScreen:
                                     checked=False)
         y += Checkbox.SIZE + 10
 
-        # Buttons
-        btn_y = min(y + 10, 660)   # cap so buttons never fall off 720-px window
-        self.btn_rst = _Btn(tx,            btn_y, 215, 44, 'Reset Defaults',
+        # ── A* time step slider (visible only when autopark is checked) ────────
+        self._ap_slider_y = y
+        self.s_dt_sub = Slider(tx, y, tw, rh,
+                               lo=1.0 / 60, hi=0.200, default=1.0 / 60,
+                               label='A* Time Step', unit='s', fmt='.4f')
+        self._btn_y_base = y + 10           # buttons when slider hidden
+        self._btn_y_ap   = y + rh + 18     # buttons when slider visible
+
+        # Buttons (position updated dynamically in _draw)
+        self.btn_rst = _Btn(tx,            self._btn_y_base, 215, 44, 'Reset Defaults',
                             C['btn_rst'],  C['btn_rst_h'])
-        self.btn_go  = _Btn(tx + tw - 270, btn_y, 270, 44, 'Start Simulation ▶',
+        self.btn_go  = _Btn(tx + tw - 270, self._btn_y_base, 270, 44, 'Start Simulation ▶',
                             C['btn_go'],   C['btn_go_h'])
-        self._hint_y = btn_y + 54
 
     # ── Config readout ────────────────────────────────────────────────────────
+
+    def _build_n_sub(self) -> int:
+        return max(5, min(60, round(1.0 / self.s_dt_sub.value)))
 
     def _build_cfg(self) -> TruckConfig:
         return TruckConfig(
@@ -366,21 +375,40 @@ class SettingsScreen:
         self.cb_parking.draw(self.screen, self.f_lbl)
         self.cb_autopark.draw(self.screen, self.f_lbl)
 
+        # A* time step slider — only when autopark is checked
+        if self.cb_autopark.checked:
+            self.s_dt_sub.draw(self.screen, self.f_lbl, self.f_val, self.LBL_X, self.VAL_X)
+            n = self._build_n_sub()
+            info = self.f_dim.render(
+                f'  N_SUB = {n}  |  DT_SUB = {1.0/n:.4f} s  |  ~{n/5:.1f}x slower than N=5',
+                True, C['gray'])
+            self.screen.blit(info, (self.TRK_X, self._ap_slider_y + self.ROW_H + 2))
+
+        # Reposition buttons depending on whether slider is visible
+        btn_y = self._btn_y_ap if self.cb_autopark.checked else self._btn_y_base
+        self.btn_rst.rect.y = btn_y
+        self.btn_go.rect.y  = btn_y
+
         # Buttons
         self.btn_rst.draw(self.screen, self.f_btn, mpos)
         self.btn_go.draw(self.screen, self.f_btn, mpos)
 
         # Hint
+        hint_y = btn_y + 54
         hint = self.f_lbl.render(
             'Drag sliders to adjust   ·   Enter or ▶ to start   ·   Esc to quit',
             True, C['gray'])
-        self.screen.blit(hint, (self.TRK_X, self._hint_y))
+        self.screen.blit(hint, (self.TRK_X, hint_y))
 
         # Live preview
         self._draw_preview(self._build_cfg())
         pygame.display.flip()
 
     # ── Event loop ────────────────────────────────────────────────────────────
+
+    def _return_values(self) -> tuple:
+        return (self._build_cfg(), self.cb_parking.checked,
+                self.cb_autopark.checked, self._build_n_sub())
 
     def run(self) -> tuple:
         clock = pygame.time.Clock()
@@ -392,15 +420,16 @@ class SettingsScreen:
                     raise SystemExit
                 if ev.type == pygame.KEYDOWN:
                     if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                        return self._build_cfg(), self.cb_parking.checked, self.cb_autopark.checked
+                        return self._return_values()
                     if ev.key == pygame.K_ESCAPE:
                         pygame.quit()
                         raise SystemExit
                 if self.btn_go.clicked(ev):
-                    return self._build_cfg(), self.cb_parking.checked, self.cb_autopark.checked
+                    return self._return_values()
                 if self.btn_rst.clicked(ev):
                     for sl in self.sliders:
                         sl.reset()
+                    self.s_dt_sub.reset()
                 # Checkboxes — handle then enforce mutual exclusion
                 prev_park = self.cb_parking.checked
                 prev_auto = self.cb_autopark.checked
@@ -412,9 +441,11 @@ class SettingsScreen:
                     self.cb_parking.checked = False
                 for sl in self.sliders:
                     sl.handle_event(ev)
+                if self.cb_autopark.checked:
+                    self.s_dt_sub.handle_event(ev)
             self._draw()
 
 
 def run_settings(screen: pygame.Surface, default_cfg: TruckConfig) -> tuple:
-    """Show the settings screen and return (TruckConfig, parking_enabled, autopark_enabled)."""
+    """Show the settings screen and return (TruckConfig, parking_enabled, autopark_enabled, n_sub)."""
     return SettingsScreen(screen, default_cfg).run()

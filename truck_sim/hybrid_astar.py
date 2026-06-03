@@ -2,7 +2,8 @@
 
 State space : 4D trailer-centric  (xT, yT, ψ₂, Δψ)
 Controls    : virtual trailer steering (δT, VT) converted to (δf, VR) via IK
-Integration : RK4 at DT_SUB = 0.2 s per substep, N_SUB = 5 substeps per node
+Integration : RK4 at DT_SUB = 1/60 s per substep, N_SUB = 60 substeps per node
+             (matches simulation frame rate exactly → zero integration mismatch)
 Threading   : planning runs in a background daemon thread; main loop polls is_done
 """
 
@@ -24,16 +25,17 @@ YAW_RES  = math.pi / 18    # rad — 10° yaw bins  → 36 bins per revolution
 DPSI_RES = math.pi / 18    # rad — 10° hitch bins
 
 DT_PLAN  = 1.0              # s  — planning horizon per node expansion
-N_SUB    = 5                # integration substeps per expansion
-DT_SUB   = DT_PLAN / N_SUB  # 0.2 s each
+N_SUB    = 60               # integration substeps per expansion  (= DT_PLAN × 60 fps)
+DT_SUB   = 1.0 / 60        # s  — exactly matches simulation frame rate (≈ 0.01667 s)
 
 VT_VALS       = [1.0, -1.0]   # virtual trailer speed options (m/s)
-N_STEER       = 5              # number of δT samples (including 0)
+N_STEER       = 9              # number of δT samples (including 0)
 REVERSE_WEIGHT = 1.0           # no penalty for reverse (backing in is the goal)
 H_W_PSI       = 2.0            # heuristic weight for heading error
 H_W_DPSI      = 1.5            # heuristic weight for hitch angle
-JACKKNIFE_LIM = math.radians(80)  # hard limit during planning
+JACKKNIFE_LIM = math.radians(55)  # hard limit during planning (physical limit ~60°)
 WALL_MARGIN   = 0.3            # m — safety buffer; planner stays this far from walls
+DT_LB2        = 0.5            # rad — reasonable trailer virtual-steer bound (paper §4.3)
 
 MAX_EXPANSIONS = 100_000
 
@@ -125,6 +127,42 @@ def _in_collision(state: TruckTrailerState, cfg: TruckConfig,
     return False
 
 
+def _dT_from_dF(delta_f: float, dpsi: float, cfg: TruckConfig) -> float | None:
+    """Forward map δf → δT at given hitch angle Δψ (paper Eq. 15).
+
+    δT = atan( (L·sin(Δψ) − LH·cos(Δψ)·tan(δf)) /
+               (L·cos(Δψ) + LH·sin(Δψ)·tan(δf)) )
+    """
+    sin_d, cos_d = math.sin(dpsi), math.cos(dpsi)
+    tan_f = math.tan(delta_f)
+    denom = cfg.L * cos_d + cfg.LH * sin_d * tan_f
+    if abs(denom) < 1e-6:
+        return None
+    return math.atan((cfg.L * sin_d - cfg.LH * cos_d * tan_f) / denom)
+
+
+def _dT_adaptive_range(dpsi: float, cfg: TruckConfig) -> tuple:
+    """Adaptive δT limits at the current hitch angle (paper §4.3, Eqs. 15–16).
+
+    Returns (dT_lo, dT_hi): intersection of
+      [δT_lb1, δT_ub1]  — range mapped from physical steering limits ±max_steer
+      [−DT_LB2, +DT_LB2] — fixed reasonable-trailer-orientation bound
+    If the intersection is empty, returns (0.0, 0.0) (only straight ahead).
+    """
+    lim = cfg.max_steer
+    a = _dT_from_dF(+lim, dpsi, cfg)
+    b = _dT_from_dF(-lim, dpsi, cfg)
+    if a is None or b is None:
+        return -DT_LB2, DT_LB2
+    dT_lo = max(min(a, b), -DT_LB2)
+    dT_hi = min(max(a, b),  DT_LB2)
+    if dT_lo > dT_hi:
+        mid = (min(a, b) + max(a, b)) / 2
+        mid = max(-DT_LB2, min(DT_LB2, mid))
+        return mid, mid
+    return dT_lo, dT_hi
+
+
 def _heuristic(xT: float, yT: float, psi2: float, dpsi: float,
                 scene: AutoParkScene) -> float:
     euc    = math.hypot(xT - scene.goal_xT, yT - scene.goal_yT)
@@ -158,24 +196,26 @@ def _extract_path(goal_node: _Node) -> list:
 def run_hybrid_astar(start_state: TruckTrailerState,
                      scene: AutoParkScene,
                      cfg: TruckConfig,
-                     stop_event: threading.Event) -> list:
+                     stop_event: threading.Event,
+                     n_sub: int = N_SUB) -> list:
     """
     Run Hybrid A* from start_state to scene goal.
 
     Returns a flat list of (delta_f, vR, dt) triples (one per DT_SUB substep).
     Returns [] if no path found or stop_event is set before completion.
     """
-    ik  = InverseKinematics(cfg)
-    kin = TruckTrailerKinematics(cfg)
-
-    # Build δT control grid
-    max_dT    = ik.max_delta_T
-    dT_values = [max_dT * (i - N_STEER // 2) / (N_STEER // 2)
-                 for i in range(N_STEER)]
+    ik     = InverseKinematics(cfg)
+    kin    = TruckTrailerKinematics(cfg)
+    dt_sub = DT_PLAN / n_sub
 
     # Extract start 4D state
     s0     = start_state
     dpsi0  = _normalize(s0.psi1 - s0.psi2)
+
+    # Reject start if already jackknifed
+    if abs(dpsi0) > JACKKNIFE_LIM:
+        return []
+
     h0     = _heuristic(s0.xT, s0.yT, s0.psi2, dpsi0, scene)
 
     counter = 0
@@ -202,7 +242,11 @@ def run_hybrid_astar(start_state: TruckTrailerState,
 
         expansions += 1
 
-        # ── Expand with all 10 controls ───────────────────────────────────
+        # ── Expand: adaptive δT range per node (paper §4.3 Eqs. 15-16) ──────
+        dT_lo, dT_hi = _dT_adaptive_range(current.dpsi, cfg)
+        dT_values = ([dT_lo] if dT_lo == dT_hi else
+                     [dT_lo + (dT_hi - dT_lo) * i / (N_STEER - 1)
+                      for i in range(N_STEER)])
         for vT in VT_VALS:
             for dT in dT_values:
                 delta_f, vR = ik.solve(dT, vT, current.dpsi)
@@ -214,10 +258,10 @@ def run_hybrid_astar(start_state: TruckTrailerState,
                                         current.psi2, current.dpsi, cfg)
                 segment = []
                 ok = True
-                for _ in range(N_SUB):
-                    s       = kin.step_rk4(s, delta_f, vR, DT_SUB)
+                for _ in range(n_sub):
+                    s       = kin.step_rk4(s, delta_f, vR, dt_sub)
                     new_dps = _normalize(s.psi1 - s.psi2)
-                    segment.append((delta_f, vR, DT_SUB))
+                    segment.append((delta_f, vR, dt_sub))
                     if _in_collision(s, cfg, scene, new_dps):
                         ok = False
                         break
@@ -261,9 +305,11 @@ class HybridAstarPlanner:
             path = planner.result   # list or []
     """
 
-    def __init__(self, cfg: TruckConfig, scene: AutoParkScene):
+    def __init__(self, cfg: TruckConfig, scene: AutoParkScene, n_sub: int = N_SUB):
         self.cfg    = cfg
         self.scene  = scene
+        self.n_sub  = n_sub
+        self.dt_sub = DT_PLAN / n_sub
         self._stop  = threading.Event()
         self._done  = threading.Event()
         self._result: list | None = None
@@ -280,7 +326,7 @@ class HybridAstarPlanner:
         self._thread.start()
 
     def _run(self, state: TruckTrailerState):
-        self._result = run_hybrid_astar(state, self.scene, self.cfg, self._stop)
+        self._result = run_hybrid_astar(state, self.scene, self.cfg, self._stop, self.n_sub)
         self._done.set()
 
     def abort(self):
