@@ -29,17 +29,18 @@ DT_SUB   = DT_PLAN / N_SUB  # 0.2 s each
 
 VT_VALS       = [1.0, -1.0]   # virtual trailer speed options (m/s)
 N_STEER       = 5              # number of δT samples (including 0)
-REVERSE_WEIGHT = 2.0           # extra cost multiplier for reverse motion
+REVERSE_WEIGHT = 1.0           # no penalty for reverse (backing in is the goal)
 H_W_PSI       = 2.0            # heuristic weight for heading error
 H_W_DPSI      = 1.5            # heuristic weight for hitch angle
 JACKKNIFE_LIM = math.radians(80)  # hard limit during planning
+WALL_MARGIN   = 0.3            # m — safety buffer; planner stays this far from walls
 
-MAX_EXPANSIONS = 50_000
+MAX_EXPANSIONS = 100_000
 
 # Goal tolerances
 GOAL_XY_TOL   = 0.8          # m
 GOAL_PSI_TOL  = math.radians(15)
-GOAL_DPSI_TOL = math.radians(20)
+GOAL_DPSI_TOL = math.radians(10)  # tightened from 20° — prevents angled parking in narrow slot
 
 _N_YAW_BINS = round(2 * math.pi / YAW_RES)  # 36
 
@@ -119,7 +120,7 @@ def _in_collision(state: TruckTrailerState, cfg: TruckConfig,
     if abs(dpsi) > JACKKNIFE_LIM:
         return True
     for x, y in _all_corners(state, cfg):
-        if scene.point_in_collision(x, y):
+        if scene.point_in_collision(x, y, margin=WALL_MARGIN):
             return True
     return False
 
