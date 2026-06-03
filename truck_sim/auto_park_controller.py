@@ -1,57 +1,24 @@
 """Auto-park trajectory controller.
 
-Pre-computes all planned states at init using the same step_rk4 as the planner,
-so execution exactly matches the planned trajectory instead of accumulating
-Euler integration error over many small frames.
-
-Between step boundaries the state is linearly interpolated for smooth animation.
+Replays a pre-planned list of (delta_f, vR, dt) triples into the simulation's
+existing main loop at the render frame rate.  The controller itself does NOT
+call kin.step() — it only supplies (delta_f, vR) to the caller, which continues
+using the single authoritative kinematics integration path in main.py.
 """
-
-import math
-from kinematics import TruckTrailerState, TruckTrailerKinematics
-
-
-def _lerp_angle(a: float, b: float, t: float) -> float:
-    diff = ((b - a + math.pi) % (2 * math.pi)) - math.pi
-    return a + diff * t
-
-
-def _lerp_state(s0: TruckTrailerState, s1: TruckTrailerState,
-                t: float) -> TruckTrailerState:
-    return TruckTrailerState(
-        xR=s0.xR + (s1.xR - s0.xR) * t,
-        yR=s0.yR + (s1.yR - s0.yR) * t,
-        psi1=_lerp_angle(s0.psi1, s1.psi1, t),
-        xT=s0.xT + (s1.xT - s0.xT) * t,
-        yT=s0.yT + (s1.yT - s0.yT) * t,
-        psi2=_lerp_angle(s0.psi2, s1.psi2, t),
-    )
 
 
 class AutoParkController:
-    """Replay a planned path using the same RK4 integration as the planner.
+    """Step through a planned path at real-time frame rate.
 
-    All planned states are computed once at construction with step_rk4, so the
-    executed trajectory is identical to the planned one regardless of frame rate.
-    Between step boundaries the state is interpolated linearly for smooth visuals.
-
-    update() returns (state, delta_f, vR).  The caller must set the vehicle
-    state to the returned value and must NOT call kin.step() separately.
+    The path is a flat list of (delta_f, vR, step_dt) triples produced by
+    hybrid_astar.run_hybrid_astar().  Each triple covers one DT_SUB interval
+    (0.2 s); the controller advances through them as wall-clock dt accumulates.
     """
 
-    def __init__(self, path: list,
-                 start_state: TruckTrailerState,
-                 kin: TruckTrailerKinematics):
-        self._path   = path
-        self._idx    = 0
-        self._t_acc  = 0.0
-
-        # Pre-compute every boundary state with step_rk4, matching the planner.
-        self._states = [start_state]
-        s = start_state
-        for delta_f, vR, step_dt in path:
-            s = kin.step_rk4(s, delta_f, vR, step_dt)
-            self._states.append(s)
+    def __init__(self, path: list):
+        self._path  = path          # list of (delta_f, vR, step_dt)
+        self._idx   = 0             # index of currently active step
+        self._t_acc = 0.0           # time accumulated in current step
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -70,29 +37,17 @@ class AutoParkController:
     # ── Update ────────────────────────────────────────────────────────────────
 
     def update(self, dt: float) -> tuple:
-        """Advance by dt seconds. Returns (state, delta_f, vR).
+        """Advance by dt seconds. Returns (delta_f, vR) for this frame.
 
-        state is the vehicle state that the caller should use this frame.
-        The caller must NOT integrate state independently.
+        Once all steps are consumed, returns (0.0, 0.0).
         """
         if self.is_finished:
-            return self._states[-1], 0.0, 0.0
+            return 0.0, 0.0
 
-        _, _, step_dt = self._path[self._idx]
+        delta_f, vR, step_dt = self._path[self._idx]
         self._t_acc += dt
         if self._t_acc >= step_dt:
             self._t_acc -= step_dt
-            self._idx += 1
+            self._idx   += 1
 
-        if self.is_finished:
-            return self._states[-1], 0.0, 0.0
-
-        # Interpolate within the current planned step for smooth animation
-        _, _, cur_step_dt = self._path[self._idx]
-        t_frac = min(1.0, self._t_acc / cur_step_dt) if cur_step_dt > 0 else 1.0
-        state  = _lerp_state(self._states[self._idx],
-                              self._states[self._idx + 1],
-                              t_frac)
-
-        cur_df, cur_vr, _ = self._path[self._idx]
-        return state, cur_df, cur_vr
+        return delta_f, vR
