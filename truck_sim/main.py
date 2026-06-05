@@ -1,7 +1,7 @@
 import sys
 import math
 import pygame
-from pygame.locals import QUIT, KEYDOWN, K_ESCAPE
+from pygame.locals import QUIT, KEYDOWN, K_ESCAPE, K_SPACE
 
 from config import TruckConfig, SimConfig
 from kinematics import TruckTrailerKinematics, initial_state
@@ -17,6 +17,22 @@ from autopark_state import (
     handle_autopark_key, handle_wasd_abort,
     update as ap_update, get_control,
 )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+_paused_font = None
+
+def _draw_paused_overlay(screen: pygame.Surface):
+    global _paused_font
+    if _paused_font is None:
+        _paused_font = pygame.font.SysFont('consolas', 26, bold=True)
+    W, H = screen.get_size()
+    overlay = pygame.Surface((W, 40), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 160))
+    screen.blit(overlay, (0, H // 2 - 20))
+    surf = _paused_font.render('PAUSED  —  Space to resume', True, (255, 220, 60))
+    screen.blit(surf, surf.get_rect(center=(W // 2, H // 2)))
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -52,6 +68,7 @@ def main():
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     running = True
+    paused  = False
     while running:
         dt = min(clock.tick(sim_cfg.fps) / 1000.0, 0.05)
 
@@ -68,13 +85,32 @@ def main():
                 ren.adjust_zoom(event.y)
 
             elif event.type == KEYDOWN:
-                if aps is not None and scene is not None:
-                    state, quit_requested = handle_autopark_key(
-                        aps, event.key, state, truck_cfg, scene, handler, autopark_enabled)
-                    if quit_requested:
+                if event.key == K_SPACE:
+                    paused = not paused
+                elif not paused:
+                    if aps is not None and scene is not None:
+                        state, quit_requested = handle_autopark_key(
+                            aps, event.key, state, truck_cfg, scene, handler, autopark_enabled)
+                        if quit_requested:
+                            running = False
+                    elif event.key == K_ESCAPE:
                         running = False
-                elif event.key == K_ESCAPE:
-                    running = False
+
+        if paused:
+            # Render current frame but skip all simulation updates
+            hitch_deg = state.hitch_angle_deg
+            jk_warn   = abs(hitch_deg) >= sim_cfg.jackknife_warn_deg
+            jk_limit  = abs(hitch_deg) >= sim_cfg.jackknife_limit_deg
+            delta_f   = handler._steer
+            vR        = handler._speed
+            ren.draw_frame(state, delta_f, vR, jk_warn, jk_limit,
+                           aps=aps, scene=scene, parking=parking)
+            hud.draw_frame(vR, math.degrees(delta_f), hitch_deg, jk_warn, jk_limit, ren.ppm,
+                           aps=aps, autopark_enabled=autopark_enabled,
+                           parking=parking, state=state)
+            _draw_paused_overlay(screen)
+            pygame.display.flip()
+            continue
 
         # ── Auto-park frame update ────────────────────────────────────────────
         keys = pygame.key.get_pressed()
