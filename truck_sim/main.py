@@ -19,22 +19,6 @@ from autopark_state import (
 )
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-_paused_font = None
-
-def _draw_paused_overlay(screen: pygame.Surface):
-    global _paused_font
-    if _paused_font is None:
-        _paused_font = pygame.font.SysFont('consolas', 26, bold=True)
-    W, H = screen.get_size()
-    overlay = pygame.Surface((W, 40), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 160))
-    screen.blit(overlay, (0, H // 2 - 20))
-    surf = _paused_font.render('PAUSED  —  Space to resume', True, (255, 220, 60))
-    screen.blit(surf, surf.get_rect(center=(W // 2, H // 2)))
-
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -78,7 +62,9 @@ def main():
                 running = False
 
             elif event.type == pygame.VIDEORESIZE:
-                screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
+                w = max(event.w, 1000)
+                h = max(event.h,  600)
+                screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
                 ren.on_resize(screen)
 
             elif event.type == pygame.MOUSEWHEEL:
@@ -107,8 +93,7 @@ def main():
                            aps=aps, scene=scene, parking=parking)
             hud.draw_frame(vR, math.degrees(delta_f), hitch_deg, jk_warn, jk_limit, ren.ppm,
                            aps=aps, autopark_enabled=autopark_enabled,
-                           parking=parking, state=state)
-            _draw_paused_overlay(screen)
+                           parking=parking, state=state, paused=True)
             pygame.display.flip()
             continue
 
@@ -116,7 +101,11 @@ def main():
         keys = pygame.key.get_pressed()
         if aps is not None:
             handle_wasd_abort(aps, keys)
-            ap_update(aps, state, truck_cfg, dt)
+            new_state = ap_update(aps, state, truck_cfg, dt)
+            if new_state is not None:   # planning just finished — reset to start_state
+                state = new_state
+                handler.reset()
+
 
         # ── Control + Physics ─────────────────────────────────────────────────
         delta_f, vR = get_control(aps, handler, keys, dt)

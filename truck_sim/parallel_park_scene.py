@@ -21,7 +21,10 @@ def build_parallel_scene(cfg: TruckConfig) -> AutoParkScene:
 
     half_slot  = slot_len / 2
     kerb_y     = -(slot_wid / 2)
-    road_top_y = slot_wid * 1.5
+    # Parked-car walls cover only the kerb lane (up to the slot's north edge).
+    # Keeping this below initial_yR (= slot_wid/2 + 1.5) ensures the start
+    # state is collision-free.
+    road_top_y = slot_wid / 2   # = north edge of the parking slot ≈ +1.97 m
     INF        = float('inf')
 
     spot = ParkingSpot(

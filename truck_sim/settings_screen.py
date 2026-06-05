@@ -430,7 +430,9 @@ class SettingsScreen:
                     pygame.quit()
                     raise SystemExit
                 if ev.type == pygame.VIDEORESIZE:
-                    self.screen = pygame.display.set_mode(ev.size, pygame.RESIZABLE)
+                    w = max(ev.w, 1000)
+                    h = max(ev.h,  600)
+                    self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
                 if ev.type == pygame.KEYDOWN:
                     if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         return self._return_values()

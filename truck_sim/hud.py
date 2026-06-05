@@ -19,9 +19,10 @@ class HUD:
 
     def __init__(self, screen: pygame.Surface):
         self.screen = screen
-        self.font_md = pygame.font.SysFont('consolas', 19)
-        self.font_lg = pygame.font.SysFont('consolas', 22, bold=True)
-        self.font_sm = pygame.font.SysFont('consolas', 16)
+        self.font_md     = pygame.font.SysFont('consolas', 19)
+        self.font_lg     = pygame.font.SysFont('consolas', 22, bold=True)
+        self.font_sm     = pygame.font.SysFont('consolas', 16)
+        self.font_paused = pygame.font.SysFont('consolas', 26, bold=True)
         self._blink_t   = 0.0
         self._blink_vis = True
         self._panel = pygame.Surface((self.PANEL_W, self.PANEL_H), pygame.SRCALPHA)
@@ -188,10 +189,18 @@ class HUD:
             hint = self.font_sm.render('P: re-plan   WASD: manual', True, GRAY)
             self.screen.blit(hint, (px + 8, py + 36))
 
+    def draw_paused_overlay(self):
+        W, H = self.screen.get_size()
+        overlay = pygame.Surface((W, 40), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 160))
+        self.screen.blit(overlay, (0, H // 2 - 20))
+        surf = self.font_paused.render('PAUSED  —  Space to resume', True, (255, 220, 60))
+        self.screen.blit(surf, surf.get_rect(center=(W // 2, H // 2)))
+
     def draw_frame(self, vR: float, steer_deg: float, hitch_deg: float,
                    jk_warn: bool, jk_limit: bool, ppm: float,
                    aps=None, autopark_enabled: bool = False,
-                   parking=None, state=None):
+                   parking=None, state=None, paused: bool = False):
         """Single HUD call per frame — gauges + all conditional overlays.
 
         aps: AutoParkState | None
@@ -230,3 +239,6 @@ class HUD:
                 self.draw_parking_success(parking.success_count,
                                           parking.success_timer,
                                           ParkingManager.SUCCESS_HOLD)
+
+        if paused:
+            self.draw_paused_overlay()

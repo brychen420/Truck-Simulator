@@ -132,9 +132,11 @@ def handle_wasd_abort(aps: AutoParkState, keys) -> None:
 # ── Per-frame state machine update ───────────────────────────────────────────
 
 def update(aps: AutoParkState, current_state: TruckTrailerState,
-           truck_cfg: TruckConfig, dt: float) -> None:
-    """Advance the state machine by one frame (call once per main loop tick)."""
+           truck_cfg: TruckConfig, dt: float) -> TruckTrailerState:
+    """Advance the state machine by one frame (call once per main loop tick).
 
+    Returns the (possibly reset) vehicle state — caller must reassign it.
+    """
     # PLANNING → EXECUTING / FAILED
     if aps.mode == APMode.PLANNING and aps.planner and aps.planner.is_done:
         path = aps.planner.result
@@ -145,6 +147,11 @@ def update(aps: AutoParkState, current_state: TruckTrailerState,
                 aps.start_state or current_state, path, truck_cfg,
                 sample_every=5, dt_sim=aps.planner.dt_sub)
             aps.mode        = APMode.EXECUTING
+            # Reset vehicle to the state planning started from — the path was
+            # computed from start_state, and input-handler inertia may have
+            # drifted the simulation state during the planning phase.
+            if aps.start_state is not None:
+                return aps.start_state
         else:
             aps.mode       = APMode.FAILED
             aps.fail_timer = 4.0
