@@ -288,6 +288,37 @@ class Renderer:
 
     # ── Auto-park scene ─────────────────────────────────────────
 
+    def draw_parallel_scene_walls(self, scene):
+        """Draw kerb + flanking parked-car obstacles for the parallel parking scene."""
+        WALL_FILL   = (72, 72, 72)
+        WALL_BORDER = (130, 130, 130)
+        CAR_FILL    = (100, 80, 60)
+        CAR_BORDER  = (160, 130, 100)
+
+        kerb_y    = scene.back_wall_y
+        half_slot = scene.spot.length / 2
+        slot_wid  = scene.spot.width
+        FAR_X     = 70.0
+        FAR_Y_S   = -15.0
+
+        def draw_rect_w(wx1, wy1, wx2, wy2, fill, border):
+            s1, s2 = self.w2s(wx1, wy1), self.w2s(wx2, wy2)
+            rx, ry = min(s1[0], s2[0]), min(s1[1], s2[1])
+            rw = max(1, abs(s2[0] - s1[0]))
+            rh = max(1, abs(s2[1] - s1[1]))
+            r = pygame.Rect(rx, ry, rw, rh)
+            pygame.draw.rect(self.screen, fill,   r)
+            pygame.draw.rect(self.screen, border, r, 2)
+
+        # Kerb block (everything south of kerb_y)
+        draw_rect_w(-FAR_X, FAR_Y_S, FAR_X, kerb_y, WALL_FILL, WALL_BORDER)
+        # Kerb lip (bright strip at road edge)
+        draw_rect_w(-FAR_X, kerb_y, FAR_X, kerb_y + 0.3, (190, 190, 190), (220, 220, 220))
+        # Left parked-car block
+        draw_rect_w(-FAR_X, kerb_y, -(half_slot + 0.5), kerb_y + slot_wid, CAR_FILL, CAR_BORDER)
+        # Right parked-car block
+        draw_rect_w(half_slot + 0.5, kerb_y, FAR_X, kerb_y + slot_wid, CAR_FILL, CAR_BORDER)
+
     def draw_scene_walls(self, scene):
         """Draw the alley walls as solid dark-gray filled rectangles."""
         WALL_FILL   = (72, 72, 72)
@@ -412,7 +443,10 @@ class Renderer:
 
         # Auto-park scene
         if scene is not None:
-            self.draw_scene_walls(scene)
+            if abs(scene.spot.angle) < 0.01:   # parallel (angle ≈ 0)
+                self.draw_parallel_scene_walls(scene)
+            else:                               # perpendicular (angle ≈ π/2)
+                self.draw_scene_walls(scene)
             if aps is not None and aps.path_states:
                 self.draw_planned_path(aps.path_states, self.tcfg)
             self.draw_parking_spot(scene.spot,

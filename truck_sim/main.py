@@ -28,7 +28,7 @@ def main():
     pygame.display.set_caption("EuroTruck 3.0 — 2D Kinematic Trailer Sim")
     screen = pygame.display.set_mode((sim_cfg.window_w, sim_cfg.window_h))
 
-    truck_cfg, parking_enabled, autopark_enabled, ap_n_sub = run_settings(screen, TruckConfig())
+    truck_cfg, parking_enabled, autopark_enabled, ap_n_sub, ap_parallel = run_settings(screen, TruckConfig())
 
     clock   = pygame.time.Clock()
     kin     = TruckTrailerKinematics(truck_cfg)
@@ -36,12 +36,16 @@ def main():
     ren     = Renderer(screen, truck_cfg, sim_cfg)
     hud     = HUD(screen)
 
-    scene = build_scene(truck_cfg) if autopark_enabled else None
     if autopark_enabled:
-        assert scene is not None
+        if ap_parallel:
+            from parallel_park_scene import build_parallel_scene
+            scene = build_parallel_scene(truck_cfg)
+        else:
+            scene = build_scene(truck_cfg)
         aps: AutoParkState | None = init_autopark(truck_cfg, scene, ap_n_sub)
         state = make_initial_state(scene, truck_cfg)
     else:
+        scene = None
         aps   = None
         state = initial_state(truck_cfg)
     parking = ParkingManager(truck_cfg) if parking_enabled else None
