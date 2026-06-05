@@ -26,7 +26,7 @@ def main():
 
     pygame.init()
     pygame.display.set_caption("EuroTruck 3.0 — 2D Kinematic Trailer Sim")
-    screen = pygame.display.set_mode((sim_cfg.window_w, sim_cfg.window_h))
+    screen = pygame.display.set_mode((sim_cfg.window_w, sim_cfg.window_h), pygame.RESIZABLE)
 
     truck_cfg, parking_enabled, autopark_enabled, ap_n_sub, ap_parallel = run_settings(screen, TruckConfig())
 
@@ -59,6 +59,10 @@ def main():
         for event in pygame.event.get():
             if event.type == QUIT:
                 running = False
+
+            elif event.type == pygame.VIDEORESIZE:
+                screen = pygame.display.set_mode(event.size, pygame.RESIZABLE)
+                ren.on_resize(screen)
 
             elif event.type == pygame.MOUSEWHEEL:
                 ren.adjust_zoom(event.y)

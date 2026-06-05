@@ -171,7 +171,13 @@ def _heuristic(xT: float, yT: float, psi2: float, dpsi: float,
     return euc + H_W_PSI * d_psi + H_W_DPSI * d_dpsi
 
 
-def _is_goal(node: _Node, scene: AutoParkScene) -> bool:
+def _is_goal(node: _Node, scene: AutoParkScene, cfg: TruckConfig) -> bool:
+    # For parallel parking (slot angle ≈ 0): require all 8 corners inside the spot.
+    if cfg is not None and abs(scene.spot.angle) < 0.01:
+        state = _reconstruct_state(node.xT, node.yT, node.psi2, node.dpsi, cfg)
+        corners = _all_corners(state, cfg)
+        return scene.spot.contains_polygon(corners)
+    # For perpendicular parking: use tolerance-based check.
     return (
         abs(node.xT  - scene.goal_xT)                  < GOAL_XY_TOL  and
         abs(node.yT  - scene.goal_yT)                  < GOAL_XY_TOL  and
@@ -237,7 +243,7 @@ def run_hybrid_astar(start_state: TruckTrailerState,
             continue
         closed.add(key)
 
-        if _is_goal(current, scene):
+        if _is_goal(current, scene, cfg):
             return _extract_path(current)
 
         expansions += 1

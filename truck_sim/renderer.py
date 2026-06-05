@@ -46,11 +46,19 @@ class Renderer:
         self.scfg      = sim_cfg
         self.cam_x     = 0.0
         self.cam_y     = 0.0
-        self.screen_cx = sim_cfg.window_w / 2
-        self.screen_cy = sim_cfg.window_h / 2
         self.ppm       = sim_cfg.pixels_per_m   # mutable zoom level (px per metre)
         self._park_font = pygame.font.SysFont('consolas', 22, bold=True)
         self._dist_font = pygame.font.SysFont('consolas', 14, bold=True)
+        self._sync_screen_center()
+
+    def _sync_screen_center(self):
+        w, h = self.screen.get_size()
+        self.screen_cx = w / 2
+        self.screen_cy = h / 2
+
+    def on_resize(self, new_screen: pygame.Surface):
+        self.screen = new_screen
+        self._sync_screen_center()
 
     def adjust_zoom(self, scroll_y: int):
         """scroll_y > 0 = wheel up = zoom in; < 0 = wheel down = zoom out."""
@@ -70,13 +78,14 @@ class Renderer:
     def _update_camera(self, state: TruckTrailerState):
         self.cam_x = state.xR
         self.cam_y = state.yR
+        self._sync_screen_center()
 
     # ── Sub-draw routines ───────────────────────────────────────
 
     def _draw_grid(self):
         ppm     = self.ppm
         spacing = self.scfg.grid_spacing
-        W, H    = self.scfg.window_w, self.scfg.window_h
+        W, H    = self.screen.get_size()
 
         left_w  = self.cam_x - self.screen_cx / ppm
         right_w = self.cam_x + self.screen_cx / ppm
@@ -241,7 +250,7 @@ class Renderer:
 
     def draw_parking_arrow(self, spot, dist_m: float):
         """Screen-edge red triangle + distance text when the spot is off-screen."""
-        W, H = self.scfg.window_w, self.scfg.window_h
+        W, H = self.screen.get_size()
         sx, sy = self.w2s(spot.x, spot.y)
 
         MARGIN = 60

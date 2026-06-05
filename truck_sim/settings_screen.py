@@ -170,11 +170,11 @@ class SettingsScreen:
     VAL_X = 824    # left edge of value text
     ROW_H = 42     # vertical pixels per slider row
 
-    # Right preview panel
-    PRV_X = 950
-    PRV_Y = 52
-    PRV_W = 310
-    PRV_H = 615
+    # Right preview panel — X and W are computed dynamically in _draw_preview
+    PRV_Y   = 52
+    PRV_H   = 615
+    PRV_X0  = 935   # fixed left edge (just right of the left-side layout)
+    PRV_GAP = 10    # margin from right screen edge
 
     def __init__(self, screen: pygame.Surface, default_cfg: TruckConfig):
         self.screen = screen
@@ -268,7 +268,10 @@ class SettingsScreen:
     # ── Preview panel ─────────────────────────────────────────────────────────
 
     def _draw_preview(self, cfg: TruckConfig):
-        PX, PY, PW, PH = self.PRV_X, self.PRV_Y, self.PRV_W, self.PRV_H
+        PX = self.PRV_X0
+        PY = self.PRV_Y
+        PW = max(100, self.screen.get_width() - PX - self.PRV_GAP)
+        PH = self.PRV_H
 
         # Panel background
         pygame.draw.rect(self.screen, C['prv_bg'],  (PX, PY, PW, PH), border_radius=8)
@@ -426,6 +429,8 @@ class SettingsScreen:
                 if ev.type == pygame.QUIT:
                     pygame.quit()
                     raise SystemExit
+                if ev.type == pygame.VIDEORESIZE:
+                    self.screen = pygame.display.set_mode(ev.size, pygame.RESIZABLE)
                 if ev.type == pygame.KEYDOWN:
                     if ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         return self._return_values()

@@ -1,4 +1,4 @@
-"""Fixed parallel-parking scene (路邊停車 / roadside parking).
+"""Fixed parallel-parking scene (roadside parking).
 
 The parking slot runs east-west (angle=0), bordered by a kerb (curb wall)
 on the south side and flanked by two parked-car obstacles on each end.
