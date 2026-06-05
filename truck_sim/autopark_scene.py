@@ -1,4 +1,4 @@
-"""Fixed perpendicular reverse-parking scene (倒車入庫).
+"""Fixed perpendicular reverse-parking scene.
 
 All geometry is derived from TruckConfig so it scales with vehicle parameters.
 The truck starts heading right (psi1=0) at (-10, 8).

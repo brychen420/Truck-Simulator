@@ -7,12 +7,15 @@ A real-time 2D driving simulation of an articulated truck and trailer, implement
 ## Features
 
 - **Paper-accurate kinematics** — equations (1)–(6) govern truck heading, trailer heading, and hitch-point constraint; integrated with RK4
-- **Pre-simulation setup screen** — adjust all vehicle geometry with sliders; live top-down preview updates in real time
+- **Pre-simulation setup screen** — adjust all vehicle geometry with sliders; live top-down preview scales with window width
+- **Resizable window** — drag to any size during both settings and simulation; minimum 1000 × 600
 - **WASD driving** — throttle and steering with realistic inertia and auto-centering
 - **Mouse scroll wheel zoom** — zoom in/out during simulation; current scale shown in HUD
+- **Pause** — `Space` freezes simulation and overlays a banner; all other keys are suppressed
 - **Jackknife detection** — color-coded HUD: warning at 60°, limit at 85° articulation angle
 - **Parking challenge mode** — randomly spawned parking spot with screen-edge direction arrow and success detection
-- **Hybrid A\* auto-parking** — full 4D planner (trailer-centric state space) with inverse kinematics; ghost path visualization; configurable planning time step
+- **Hybrid A\* auto-parking (perpendicular)** — reverse into a fixed alley slot; ghost path visualization; configurable planning time step
+- **Hybrid A\* auto-parking (parallel)** — roadside parallel parking; goal condition requires all 8 body corners inside the spot
 
 ---
 
@@ -100,7 +103,8 @@ The settings screen opens first. Adjust sliders, optionally enable a mode, then 
 | Drag slider | Adjust parameter; live preview updates instantly |
 | Click anywhere on track | Jump slider to that value |
 | `[ ] Enable Parking Challenge` | Toggle random parking challenge mode |
-| `[ ] Enable Auto-Park Scene` | Toggle Hybrid A\* auto-parking mode; reveals A\* Time Step slider |
+| `[ ] Enable Auto-Park Scene (Hybrid A*)` | Toggle perpendicular auto-parking; reveals A\* Time Step slider |
+| `[ ] Enable Auto-Park (Parallel) (Hybrid A*)` | Toggle parallel roadside auto-parking; reveals A\* Time Step slider |
 | A\* Time Step slider | Set planning sub-step size (0.017 s – 0.200 s); smaller = more accurate but slower to plan |
 | `Reset Defaults` | Restore all sliders to paper values |
 | `Enter` / **▶** | Start simulation |
@@ -114,6 +118,7 @@ The settings screen opens first. Adjust sliders, optionally enable a mode, then 
 | `S` | Accelerate backward |
 | `A` | Steer left |
 | `D` | Steer right |
+| `Space` | Pause / resume (freezes physics and input; zoom and resize still work) |
 | Scroll wheel ↑ / ↓ | Zoom in / out (5–300 px/m) |
 | `R` | Reset vehicle to initial position |
 | `Esc` | Quit |
@@ -184,9 +189,16 @@ Enable **Parking Challenge** in the settings screen.
 
 ## Auto-Park Mode (Hybrid A*)
 
-Enable **Auto-Park Scene** in the settings screen.
+Two scenes are available; select one in the settings screen before starting.
 
-The vehicle starts outside a fixed perpendicular parking alley. Press `P` to run the planner in a background thread; the simulation remains interactive during planning.
+Press `P` to run the planner in a background thread. The simulation remains interactive during planning. When planning completes, the vehicle is snapped back to the exact start state before execution begins (eliminates drift from input-handler inertia during the planning phase).
+
+### Scenes
+
+| Scene | Setting | Starting pose | Goal condition |
+|-------|---------|---------------|----------------|
+| **Perpendicular** | Enable Auto-Park Scene | Rear axle at (−10, 8), heading east | Trailer axle within 0.8 m of goal, ψ₂ within 15°, Δψ within 10° |
+| **Parallel** | Enable Auto-Park (Parallel) | East of slot, heading east, in travel lane | All 8 body corners inside the parking spot |
 
 ### Planner
 
@@ -197,7 +209,7 @@ The vehicle starts outside a fixed perpendicular parking alley. Press `P` to run
 | Integration | RK4, configurable sub-steps per node |
 | Jackknife limit | \|Δψ\| ≤ 55° during planning |
 | Adaptive δT range | Per-node feasible steer range derived from paper §4.3 Eqs. 15–16 |
-| Goal tolerance | xy < 0.8 m, ψ₂ < 15°, Δψ < 10° |
+| Max expansions | 100 000 nodes |
 
 ### A\* Time Step Slider
 
@@ -229,11 +241,12 @@ EuroTruck3.0/
     ├── config.py                # TruckConfig / SimConfig dataclasses
     ├── kinematics.py            # State vector, RK4 integrator, hitch geometry
     ├── input_handler.py         # WASD input with inertia model
-    ├── settings_screen.py       # Pre-simulation slider UI
+    ├── settings_screen.py       # Pre-simulation slider UI (resizable; preview panel scales)
     ├── renderer.py              # pygame rendering: grid, bodies, ghost path, parking
-    ├── hud.py                   # Overlay dashboard, auto-park status, parking banners
+    ├── hud.py                   # Overlay dashboard, auto-park status, parking banners, pause overlay
     ├── parking.py               # Parking spot geometry, spawning, success detection
-    ├── autopark_scene.py        # Fixed alley scene geometry and goal state
+    ├── autopark_scene.py        # Perpendicular alley scene geometry and goal state
+    ├── parallel_park_scene.py   # Parallel (roadside) parking scene geometry and goal state
     ├── autopark_state.py        # APMode enum, AutoParkState, state machine logic
     ├── hybrid_astar.py          # Hybrid A* planner (background thread)
     ├── inverse_kinematics.py    # Virtual trailer steer → physical (δf, VR)
@@ -244,10 +257,14 @@ EuroTruck3.0/
 
 ## Coordinate Convention
 
-- World frame: +x right, +y up, angles counter-clockwise from +x
+- World frame: +x right (east), +y up (north), angles counter-clockwise from +x
 - Screen frame: +x right, +y down (pygame default)
 - Conversion: `screen_y = screen_center_y − world_y × ppm`
-- Auto-park initial pose: truck rear axle at (−10, 8), heading along +x
+
+| Scene | Initial truck rear-axle position | Heading |
+|-------|----------------------------------|---------|
+| Perpendicular | (−10, 8) | East (ψ = 0) |
+| Parallel | (~16, ~3.5) — east of slot | East (ψ = 0) |
 
 ---
 
