@@ -238,13 +238,7 @@ class SettingsScreen:
                                         checked=False)
         y += Checkbox.SIZE + 10
 
-        # ── A* time step slider (visible only when autopark is checked) ────────
-        self._ap_slider_y = y
-        self.s_dt_sub = Slider(tx, y, tw, rh,
-                               lo=1.0 / 60, hi=0.200, default=1.0 / 60,
-                               label='A* Time Step', unit='s', fmt='.4f')
-        self._btn_y_base = y + 10           # buttons when slider hidden
-        self._btn_y_ap   = y + rh + 18     # buttons when slider visible
+        self._btn_y_base = y + 10   # buttons (fixed position; no slider shown)
 
         # Buttons (position updated dynamically in _draw)
         self.btn_rst = _Btn(tx,            self._btn_y_base, 215, 44, 'Reset Defaults',
@@ -255,7 +249,7 @@ class SettingsScreen:
     # ── Config readout ────────────────────────────────────────────────────────
 
     def _build_n_sub(self) -> int:
-        return max(5, min(60, round(1.0 / self.s_dt_sub.value)))
+        return 5  # fixed: DT_SUB = 0.2 s
 
     def _build_cfg(self) -> TruckConfig:
         return TruckConfig(
@@ -383,18 +377,7 @@ class SettingsScreen:
         self.cb_autopark.draw(self.screen, self.f_lbl)
         self.cb_autopark_par.draw(self.screen, self.f_lbl)
 
-        # A* time step slider — only when either autopark mode is checked
-        ap_checked = self.cb_autopark.checked or self.cb_autopark_par.checked
-        if ap_checked:
-            self.s_dt_sub.draw(self.screen, self.f_lbl, self.f_val, self.LBL_X, self.VAL_X)
-            n = self._build_n_sub()
-            info = self.f_dim.render(
-                f'  N_SUB = {n}  |  DT_SUB = {1.0/n:.4f} s  |  ~{n/5:.1f}x slower than N=5',
-                True, C['gray'])
-            self.screen.blit(info, (self.TRK_X, self._ap_slider_y + self.ROW_H + 2))
-
-        # Reposition buttons depending on whether slider is visible
-        btn_y = self._btn_y_ap if ap_checked else self._btn_y_base
+        btn_y = self._btn_y_base
         self.btn_rst.rect.y = btn_y
         self.btn_go.rect.y  = btn_y
 
@@ -444,7 +427,6 @@ class SettingsScreen:
                 if self.btn_rst.clicked(ev):
                     for sl in self.sliders:
                         sl.reset()
-                    self.s_dt_sub.reset()
                 # Checkboxes — handle then enforce 3-way mutual exclusion
                 prev_park = self.cb_parking.checked
                 prev_auto = self.cb_autopark.checked
@@ -463,8 +445,6 @@ class SettingsScreen:
                     self.cb_autopark.checked = False
                 for sl in self.sliders:
                     sl.handle_event(ev)
-                if self.cb_autopark.checked or self.cb_autopark_par.checked:
-                    self.s_dt_sub.handle_event(ev)
             self._draw()
 
 

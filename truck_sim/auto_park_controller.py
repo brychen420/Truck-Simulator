@@ -1,24 +1,22 @@
 """Auto-park trajectory controller.
 
-Replays a pre-planned list of (delta_f, vR, dt) triples into the simulation's
-existing main loop at the render frame rate.  The controller itself does NOT
-call kin.step() — it only supplies (delta_f, vR) to the caller, which continues
-using the single authoritative kinematics integration path in main.py.
+Replays a pre-planned list of (delta_f, vR, step_dt) triples.  The controller
+owns only the path index; the caller drives the integration step with step_dt
+so the physics exactly match what the planner computed.
 """
 
 
 class AutoParkController:
-    """Step through a planned path at real-time frame rate.
+    """Step through a planned path, one triple at a time.
 
     The path is a flat list of (delta_f, vR, step_dt) triples produced by
-    hybrid_astar.run_hybrid_astar().  Each triple covers one DT_SUB interval
-    (0.2 s); the controller advances through them as wall-clock dt accumulates.
+    run_hybrid_astar().  Call consume() to pop the current step; the caller
+    is responsible for integrating with the returned step_dt.
     """
 
     def __init__(self, path: list):
-        self._path  = path          # list of (delta_f, vR, step_dt)
-        self._idx   = 0             # index of currently active step
-        self._t_acc = 0.0           # time accumulated in current step
+        self._path  = path      # list of (delta_f, vR, step_dt)
+        self._idx   = 0
 
     # ── Properties ────────────────────────────────────────────────────────────
 
@@ -34,20 +32,15 @@ class AutoParkController:
     def is_finished(self) -> bool:
         return self._idx >= len(self._path)
 
-    # ── Update ────────────────────────────────────────────────────────────────
+    # ── Consume ───────────────────────────────────────────────────────────────
 
-    def update(self, dt: float) -> tuple:
-        """Advance by dt seconds. Returns (delta_f, vR) for this frame.
+    def consume(self) -> tuple:
+        """Pop and return (delta_f, vR, step_dt) for the current step.
 
-        Once all steps are consumed, returns (0.0, 0.0).
+        Advances the index by one.  Returns (0.0, 0.0, 0.0) if finished.
         """
         if self.is_finished:
-            return 0.0, 0.0
-
-        delta_f, vR, step_dt = self._path[self._idx]
-        self._t_acc += dt
-        if self._t_acc >= step_dt:
-            self._t_acc -= step_dt
-            self._idx   += 1
-
-        return delta_f, vR
+            return 0.0, 0.0, 0.0
+        triple = self._path[self._idx]
+        self._idx += 1
+        return triple

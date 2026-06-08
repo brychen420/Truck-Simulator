@@ -132,7 +132,7 @@ def handle_wasd_abort(aps: AutoParkState, keys) -> None:
 # ── Per-frame state machine update ───────────────────────────────────────────
 
 def update(aps: AutoParkState, current_state: TruckTrailerState,
-           truck_cfg: TruckConfig, dt: float) -> TruckTrailerState:
+           truck_cfg: TruckConfig, dt: float) -> TruckTrailerState | None:
     """Advance the state machine by one frame (call once per main loop tick).
 
     Returns the (possibly reset) vehicle state — caller must reassign it.
@@ -168,13 +168,26 @@ def update(aps: AutoParkState, current_state: TruckTrailerState,
         aps.mode = APMode.DONE
 
 
-# ── Control input selector ────────────────────────────────────────────────────
+# ── Execution step (called only in EXECUTING mode) ───────────────────────────
+
+def step_executing(aps: AutoParkState,
+                   state: TruckTrailerState,
+                   kin) -> TruckTrailerState:
+    """Consume one planned step per frame and integrate with its own step_dt."""
+    if aps.ctrl is None or aps.ctrl.is_finished:
+        return state
+    delta_f, vR, step_dt = aps.ctrl.consume()
+    return kin.step_rk4(state, delta_f, vR, step_dt)
+
+
+# ── Control input selector (manual / planning only) ──────────────────────────
 
 def get_control(aps: AutoParkState | None, handler, keys, dt: float) -> tuple[float, float]:
-    """Return (delta_f, vR) from the auto-park controller or the manual handler."""
-    if (aps is not None
-            and aps.mode == APMode.EXECUTING
-            and aps.ctrl is not None
-            and aps.planner is not None):
-        return aps.ctrl.update(aps.planner.dt_sub)
+    """Return (delta_f, vR) for manual driving or planning phase."""
+    if aps is not None and aps.mode == APMode.EXECUTING:
+        # Physics are driven by step_executing(); return last known inputs for HUD only.
+        if aps.ctrl is not None and not aps.ctrl.is_finished:
+            delta_f, vR, _ = aps.ctrl._path[aps.ctrl._idx]
+            return delta_f, vR
+        return 0.0, 0.0
     return handler.update(keys, dt)

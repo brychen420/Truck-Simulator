@@ -12,10 +12,11 @@ from settings_screen import run_settings
 from parking import ParkingManager
 from autopark_scene import build_scene
 from autopark_state import (
-    APMode, AutoParkState,
+    AutoParkState,
     init_autopark, make_initial_state,
     handle_autopark_key, handle_wasd_abort,
-    update as ap_update, get_control,
+    APMode,
+    update as ap_update, get_control, step_executing,
 )
 
 
@@ -114,10 +115,10 @@ def main():
         jk_warn   = abs(hitch_deg) >= sim_cfg.jackknife_warn_deg
         jk_limit  = abs(hitch_deg) >= sim_cfg.jackknife_limit_deg
 
-        phys_dt = (aps.planner.dt_sub
-                   if aps and aps.mode == APMode.EXECUTING and aps.ctrl and aps.planner
-                   else dt)
-        state = kin.step_rk4(state, delta_f, vR, phys_dt)
+        if aps is not None and aps.mode == APMode.EXECUTING:
+            state = step_executing(aps, state, kin)
+        else:
+            state = kin.step_rk4(state, delta_f, vR, dt)
         hud.update(dt)
         if parking is not None:
             parking.update(state, vR, dt)
