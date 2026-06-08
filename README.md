@@ -51,7 +51,7 @@ Control inputs `(δf, VR)` — front-wheel steer angle and rear-axle speed.
 ψ̇₂ = VR / LT · [sin(Δψ) − (LH/L) · cos(Δψ) · tan(δf)]
 ```
 
-Integration uses RK4 (dt = 1/60 s).
+Integration uses RK4 (dt = 1/60 s for simulation; dt = 0.2 s per sub-step during planning).
 
 ---
 
@@ -122,17 +122,18 @@ The settings screen opens first. Adjust sliders, optionally enable a mode, then 
 | `R` | Reset vehicle to initial position |
 | `Esc` | Quit |
 
+Releasing `W`/`S` applies rolling friction. Releasing `A`/`D` auto-centers the steering wheel.
+
 ### Simulation — Auto-Park Mode
 
 | Key | Action |
 |-----|--------|
 | `P` | Start planning (from MANUAL or DONE/FAILED state) |
+| `Space` | Pause / resume (freezes execution; zoom and resize still work) |
 | `Esc` | Cancel planning / abort execution → return to manual |
 | `W` / `S` / `A` / `D` | Abort execution mid-path → return to manual |
 | `L` | Replay last planned path from the start position |
 | `R` | Reset vehicle to scene start position |
-
-Releasing `W`/`S` applies rolling friction. Releasing `A`/`D` auto-centers the steering wheel.
 
 ---
 
@@ -205,7 +206,7 @@ Press `P` to run the planner in a background thread. The simulation remains inte
 |----------|-------|
 | State space | 4D trailer-centric `(xT, yT, ψ₂, Δψ)` |
 | Controls | Virtual trailer steer δT × forward/reverse, converted to `(δf, VR)` via inverse kinematics |
-| Integration | RK4, configurable sub-steps per node |
+| Integration | RK4, 5 sub-steps per node (DT_SUB = 0.2 s, horizon = 1.0 s) |
 | Jackknife limit | \|Δψ\| ≤ 55° during planning |
 | Adaptive δT range | Per-node feasible steer range derived from paper §4.3 Eqs. 15–16 |
 | Max expansions | 100 000 nodes |
