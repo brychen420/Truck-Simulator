@@ -14,7 +14,7 @@ A real-time 2D driving simulation of an articulated truck and trailer, implement
 - **Pause** — `Space` freezes simulation and overlays a banner; all other keys are suppressed
 - **Jackknife detection** — color-coded HUD: warning at 60°, limit at 85° articulation angle
 - **Parking challenge mode** — randomly spawned parking spot with screen-edge direction arrow and success detection
-- **Hybrid A\* auto-parking (perpendicular)** — reverse into a fixed alley slot; ghost path visualization; configurable planning time step
+- **Hybrid A\* auto-parking (perpendicular)** — reverse into a fixed alley slot; ghost path visualization
 - **Hybrid A\* auto-parking (parallel)** — roadside parallel parking; goal condition requires all 8 body corners inside the spot
 
 ---
@@ -103,9 +103,8 @@ The settings screen opens first. Adjust sliders, optionally enable a mode, then 
 | Drag slider | Adjust parameter; live preview updates instantly |
 | Click anywhere on track | Jump slider to that value |
 | `[ ] Enable Parking Challenge` | Toggle random parking challenge mode |
-| `[ ] Enable Auto-Park Scene (Hybrid A*)` | Toggle perpendicular auto-parking; reveals A\* Time Step slider |
-| `[ ] Enable Auto-Park (Parallel) (Hybrid A*)` | Toggle parallel roadside auto-parking; reveals A\* Time Step slider |
-| A\* Time Step slider | Set planning sub-step size (0.017 s – 0.200 s); smaller = more accurate but slower to plan |
+| `[ ] Enable Auto-Park Scene (Hybrid A*)` | Toggle perpendicular auto-parking |
+| `[ ] Enable Auto-Park (Parallel) (Hybrid A*)` | Toggle parallel roadside auto-parking |
 | `Reset Defaults` | Restore all sliders to paper values |
 | `Enter` / **▶** | Start simulation |
 | `Esc` | Quit |
@@ -211,16 +210,9 @@ Press `P` to run the planner in a background thread. The simulation remains inte
 | Adaptive δT range | Per-node feasible steer range derived from paper §4.3 Eqs. 15–16 |
 | Max expansions | 100 000 nodes |
 
-### A\* Time Step Slider
+### Planning Time Step
 
-Controls the sub-step size `DT_SUB` (and consequently `N_SUB = 1 / DT_SUB`):
-
-| Setting | DT_SUB | N_SUB | Planning speed |
-|---------|--------|-------|----------------|
-| Fast end | 0.200 s | 5 | ~12× faster |
-| Default | 0.017 s | 60 | Matches simulation frame rate exactly — zero integration mismatch |
-
-Smaller DT_SUB produces a planned path that matches execution more faithfully but takes longer to compute.
+The planner uses a fixed sub-step of `DT_SUB = 0.2 s` (`N_SUB = 5` per node, total horizon 1.0 s per expansion). Path execution integrates each planned step with the same `DT_SUB`, so the replayed trajectory exactly matches the planned one.
 
 ### Ghost Path Visualization
 
