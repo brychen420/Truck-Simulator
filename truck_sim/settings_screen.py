@@ -225,10 +225,6 @@ class SettingsScreen:
 
         # ── Mode checkboxes ────────────────────────────────────────────────────
         y += 16
-        self.cb_parking  = Checkbox(tx - 10, y,
-                                    'Enable Parking Challenge',
-                                    checked=False)
-        y += Checkbox.SIZE + 8
         self.cb_autopark = Checkbox(tx - 10, y,
                                     'Enable Auto-Park Scene  (Hybrid A*)',
                                     checked=False)
@@ -373,7 +369,6 @@ class SettingsScreen:
             sl.draw(self.screen, self.f_lbl, self.f_val, self.LBL_X, self.VAL_X)
 
         # Mode checkboxes
-        self.cb_parking.draw(self.screen, self.f_lbl)
         self.cb_autopark.draw(self.screen, self.f_lbl)
         self.cb_autopark_par.draw(self.screen, self.f_lbl)
 
@@ -401,8 +396,7 @@ class SettingsScreen:
     def _return_values(self) -> tuple:
         ap_enabled  = self.cb_autopark.checked or self.cb_autopark_par.checked
         ap_parallel = self.cb_autopark_par.checked
-        return (self._build_cfg(), self.cb_parking.checked,
-                ap_enabled, self._build_n_sub(), ap_parallel)
+        return (self._build_cfg(), ap_enabled, self._build_n_sub(), ap_parallel)
 
     def run(self) -> tuple:
         clock = pygame.time.Clock()
@@ -427,21 +421,14 @@ class SettingsScreen:
                 if self.btn_rst.clicked(ev):
                     for sl in self.sliders:
                         sl.reset()
-                # Checkboxes — handle then enforce 3-way mutual exclusion
-                prev_park = self.cb_parking.checked
+                # Checkboxes — mutual exclusion (only one autopark mode at a time)
                 prev_auto = self.cb_autopark.checked
                 prev_par  = self.cb_autopark_par.checked
-                self.cb_parking.handle_event(ev)
                 self.cb_autopark.handle_event(ev)
                 self.cb_autopark_par.handle_event(ev)
-                if self.cb_parking.checked and not prev_park:
-                    self.cb_autopark.checked = False
-                    self.cb_autopark_par.checked = False
-                elif self.cb_autopark.checked and not prev_auto:
-                    self.cb_parking.checked = False
+                if self.cb_autopark.checked and not prev_auto:
                     self.cb_autopark_par.checked = False
                 elif self.cb_autopark_par.checked and not prev_par:
-                    self.cb_parking.checked = False
                     self.cb_autopark.checked = False
                 for sl in self.sliders:
                     sl.handle_event(ev)
@@ -449,5 +436,5 @@ class SettingsScreen:
 
 
 def run_settings(screen: pygame.Surface, default_cfg: TruckConfig) -> tuple:
-    """Show the settings screen and return (TruckConfig, parking_enabled, autopark_enabled, n_sub, ap_parallel)."""
+    """Show the settings screen and return (TruckConfig, autopark_enabled, n_sub, ap_parallel)."""
     return SettingsScreen(screen, default_cfg).run()

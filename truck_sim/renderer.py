@@ -48,7 +48,6 @@ class Renderer:
         self.cam_y     = 0.0
         self.ppm       = sim_cfg.pixels_per_m   # mutable zoom level (px per metre)
         self._park_font = pygame.font.SysFont('consolas', 22, bold=True)
-        self._dist_font = pygame.font.SysFont('consolas', 14, bold=True)
         self._sync_screen_center()
 
     def _sync_screen_center(self):
@@ -211,9 +210,8 @@ class Renderer:
         """Draw the parking spot rectangle with status colour coding."""
         corners_s = [self.w2s(x, y) for x, y in spot.corners()]
 
-        # Semi-transparent fill via a temporary surface
         if is_parked:
-            fill_col, alpha = (40, 200, 40),  80
+            fill_col, alpha = (40, 200, 40), 80
             border_col = (80, 255, 80)
         elif inside:
             fill_col, alpha = (220, 200, 30), 55
@@ -233,67 +231,16 @@ class Renderer:
         pygame.draw.polygon(tmp, (*fill_col, alpha), shifted)
         self.screen.blit(tmp, (bx, by))
 
-        # Dashed border
         n = len(corners_s)
         for i in range(n):
             self._dashed_line(corners_s[i], corners_s[(i + 1) % n],
                               border_col, dash=10, gap=6, lw=2)
-
-        # Corner markers
         for cx, cy in corners_s:
             pygame.draw.circle(self.screen, border_col, (cx, cy), 4)
 
-        # Centre "P" label
         sx, sy = self.w2s(spot.x, spot.y)
         s = self._park_font.render('P', True, border_col)
         self.screen.blit(s, (sx - s.get_width() // 2, sy - s.get_height() // 2))
-
-    def draw_parking_arrow(self, spot, dist_m: float):
-        """Screen-edge red triangle + distance text when the spot is off-screen."""
-        W, H = self.screen.get_size()
-        sx, sy = self.w2s(spot.x, spot.y)
-
-        MARGIN = 60
-        on_screen = (MARGIN <= sx <= W - MARGIN and MARGIN <= sy <= H - MARGIN)
-        if on_screen:
-            return
-
-        # Direction from screen centre toward spot's screen position
-        cx, cy = W / 2, H / 2
-        dx, dy = sx - cx, sy - cy
-        d = math.hypot(dx, dy)
-        if d < 1:
-            return
-        ndx, ndy = dx / d, dy / d
-
-        # Clamp arrow tip to screen edge (with margin)
-        ts = []
-        if ndx > 0:  ts.append((W - MARGIN - cx) / ndx)
-        elif ndx < 0: ts.append((MARGIN - cx) / ndx)
-        if ndy > 0:  ts.append((H - MARGIN - cy) / ndy)
-        elif ndy < 0: ts.append((MARGIN - cy) / ndy)
-        if not ts:
-            return
-        t = min(t for t in ts if t > 0)
-        ax, ay = int(cx + ndx * t), int(cy + ndy * t)
-
-        # Triangle
-        ARR = 20
-        px, py = -ndy, ndx   # perpendicular
-        tip  = (ax, ay)
-        bl   = (int(ax - ndx * ARR + px * 10), int(ay - ndy * ARR + py * 10))
-        br   = (int(ax - ndx * ARR - px * 10), int(ay - ndy * ARR - py * 10))
-        pygame.draw.polygon(self.screen, (210, 35, 35),   [tip, bl, br])
-        pygame.draw.polygon(self.screen, (255, 140, 140), [tip, bl, br], 2)
-
-        # Distance label next to arrow
-        label = f'{dist_m:.0f} m'
-        s = self._dist_font.render(label, True, (255, 180, 180))
-        # Offset text away from the screen edge
-        off_x = int(-ndx * (ARR + 10 + s.get_width() // 2))
-        off_y = int(-ndy * (ARR + 10 + s.get_height() // 2))
-        self.screen.blit(s, (ax + off_x - s.get_width() // 2,
-                              ay + off_y - s.get_height() // 2))
 
     # ── Auto-park scene ─────────────────────────────────────────
 
@@ -439,18 +386,16 @@ class Renderer:
 
     def draw_frame(self, state: TruckTrailerState, delta_f: float, vR: float,
                    jk_warn: bool, jk_limit: bool,
-                   aps=None, scene=None, parking=None):
-        """Single render call per frame — vehicle + optional scene/parking overlays.
+                   aps=None, scene=None):
+        """Single render call per frame — vehicle + optional auto-park scene overlays.
 
         aps: AutoParkState | None
         scene: AutoParkScene | None
-        parking: ParkingManager | None
         """
         from autopark_state import APMode  # local import to avoid circular dependency
 
         self.draw(state, delta_f, vR, jk_warn, jk_limit)
 
-        # Auto-park scene
         if scene is not None:
             if abs(scene.spot.angle) < 0.01:   # parallel (angle ≈ 0)
                 self.draw_parallel_scene_walls(scene)
@@ -461,10 +406,3 @@ class Renderer:
             self.draw_parking_spot(scene.spot,
                                    is_parked=(aps is not None and aps.mode == APMode.DONE),
                                    inside=False)
-
-        # Random parking challenge
-        if parking is not None:
-            inside = parking.vehicle_inside(state)
-            self.draw_parking_spot(parking.spot, parking.is_parked, inside)
-            if not parking.is_parked:
-                self.draw_parking_arrow(parking.spot, parking.distance_to(state))

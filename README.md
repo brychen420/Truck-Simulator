@@ -13,7 +13,6 @@ A real-time 2D driving simulation of an articulated truck and trailer, implement
 - **Mouse scroll wheel zoom** — zoom in/out during simulation; current scale shown in HUD
 - **Pause** — `Space` freezes simulation and overlays a banner; all other keys are suppressed
 - **Jackknife detection** — color-coded HUD: warning at 60°, limit at 85° articulation angle
-- **Parking challenge mode** — randomly spawned parking spot with screen-edge direction arrow and success detection
 - **Hybrid A\* auto-parking (perpendicular)** — reverse into a fixed alley slot; ghost path visualization
 - **Hybrid A\* auto-parking (parallel)** — roadside parallel parking; goal condition requires all 8 body corners inside the spot
 
@@ -102,7 +101,6 @@ The settings screen opens first. Adjust sliders, optionally enable a mode, then 
 |--------|--------|
 | Drag slider | Adjust parameter; live preview updates instantly |
 | Click anywhere on track | Jump slider to that value |
-| `[ ] Enable Parking Challenge` | Toggle random parking challenge mode |
 | `[ ] Enable Auto-Park Scene (Hybrid A*)` | Toggle perpendicular auto-parking |
 | `[ ] Enable Auto-Park (Parallel) (Hybrid A*)` | Toggle parallel roadside auto-parking |
 | `Reset Defaults` | Restore all sliders to paper values |
@@ -158,13 +156,6 @@ Hitch angle color scale:
 | 60° – 80° | Orange |
 | ≥ 80° | Red (blinking) |
 
-### Parking panel (top-right, parking mode only)
-
-| Field | Description |
-|-------|-------------|
-| Park | Distance to parking spot centre (m) |
-| Parked | Number of successful parks this session |
-
 ### Auto-park panel (bottom-right, auto-park mode only)
 
 | State | Display |
@@ -173,17 +164,6 @@ Hitch angle color scale:
 | Executing | Blue text with step counter and progress bar |
 | Done | Green "Parked!" text; `L: replay  P: re-plan` hints |
 | Failed | Red "No path found" text |
-
----
-
-## Parking Challenge
-
-Enable **Parking Challenge** in the settings screen.
-
-- Spot spawns 30–65 m away at a random angle, snapped to the 5 m world grid
-- When the spot is off-screen: a red triangle arrow appears on the screen edge with distance in metres
-- **Success condition**: all 8 body corners inside the spot **and** speed ≤ 0.5 m/s
-- On success, a **PARKED!** banner appears for 3 seconds, then a new spot spawns
 
 ---
 

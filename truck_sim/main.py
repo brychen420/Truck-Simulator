@@ -9,7 +9,6 @@ from input_handler import InputHandler
 from renderer import Renderer
 from hud import HUD
 from settings_screen import run_settings
-from parking import ParkingManager
 from autopark_scene import build_scene
 from autopark_state import (
     AutoParkState,
@@ -29,7 +28,7 @@ def main():
     pygame.display.set_caption("EuroTruck 3.0 — 2D Kinematic Trailer Sim")
     screen = pygame.display.set_mode((sim_cfg.window_w, sim_cfg.window_h), pygame.RESIZABLE)
 
-    truck_cfg, parking_enabled, autopark_enabled, ap_n_sub, ap_parallel = run_settings(screen, TruckConfig())
+    truck_cfg, autopark_enabled, ap_n_sub, ap_parallel = run_settings(screen, TruckConfig())
 
     clock   = pygame.time.Clock()
     kin     = TruckTrailerKinematics(truck_cfg)
@@ -49,7 +48,6 @@ def main():
         scene = None
         aps   = None
         state = initial_state(truck_cfg)
-    parking = ParkingManager(truck_cfg) if parking_enabled else None
 
     # ── Main loop ─────────────────────────────────────────────────────────────
     running = True
@@ -91,10 +89,9 @@ def main():
             delta_f   = handler._steer
             vR        = handler._speed
             ren.draw_frame(state, delta_f, vR, jk_warn, jk_limit,
-                           aps=aps, scene=scene, parking=parking)
+                           aps=aps, scene=scene)
             hud.draw_frame(vR, math.degrees(delta_f), hitch_deg, jk_warn, jk_limit, ren.ppm,
-                           aps=aps, autopark_enabled=autopark_enabled,
-                           parking=parking, state=state, paused=True)
+                           aps=aps, autopark_enabled=autopark_enabled, paused=True)
             pygame.display.flip()
             continue
 
@@ -120,15 +117,12 @@ def main():
         else:
             state = kin.step_rk4(state, delta_f, vR, dt)
         hud.update(dt)
-        if parking is not None:
-            parking.update(state, vR, dt)
 
         # ── Render ────────────────────────────────────────────────────────────
         ren.draw_frame(state, delta_f, vR, jk_warn, jk_limit,
-                       aps=aps, scene=scene, parking=parking)
+                       aps=aps, scene=scene)
         hud.draw_frame(vR, math.degrees(delta_f), hitch_deg, jk_warn, jk_limit, ren.ppm,
-                       aps=aps, autopark_enabled=autopark_enabled,
-                       parking=parking, state=state)
+                       aps=aps, autopark_enabled=autopark_enabled)
         pygame.display.flip()
 
     # ── Cleanup ───────────────────────────────────────────────────────────────

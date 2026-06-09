@@ -90,40 +90,6 @@ class HUD:
         surf = self.font_sm.render(hint, True, GRAY)
         self.screen.blit(surf, (10, self.screen.get_height() - 26))
 
-    def draw_parking_success(self, count: int, timer: float, total: float):
-        """Centred full-screen banner shown when parking succeeds."""
-        # Fade out over last 0.8 s of display time
-        alpha = min(255, int(255 * min(1.0, timer / 0.8)))
-
-        W, H = self.screen.get_width(), self.screen.get_height()
-        banner_h = 110
-        banner = pygame.Surface((W, banner_h), pygame.SRCALPHA)
-        banner.fill((0, 0, 0, 160))
-        self.screen.blit(banner, (0, H // 2 - banner_h // 2))
-
-        col = (min(255, 60 + alpha), min(255, 210 + alpha // 6), 60)
-
-        line1 = self.font_lg.render('PARKED!', True, col)
-        line2 = self.font_sm.render(f'#{count}  —  nice work', True, (200, 200, 200))
-
-        cy = H // 2
-        self.screen.blit(line1, line1.get_rect(center=(W // 2, cy - 18)))
-        self.screen.blit(line2, line2.get_rect(center=(W // 2, cy + 26)))
-
-    def draw_parking_hud(self, dist_m: float, count: int):
-        """Small parking-info strip in the top-right corner."""
-        W = self.screen.get_width()
-        panel_w, panel_h = 200, 52
-        px = W - panel_w - 12
-        py = 12
-        panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
-        panel.fill((0, 0, 0, 155))
-        self.screen.blit(panel, (px, py))
-        dist_surf = self.font_md.render(f'Park: {dist_m:6.1f} m', True, (255, 200, 100))
-        cnt_surf  = self.font_sm.render(f'Parked: {count}',        True, GRAY)
-        self.screen.blit(dist_surf, (px + 8, py + 5))
-        self.screen.blit(cnt_surf,  (px + 8, py + 30))
-
     # ── Auto-park overlay ──────────────────────────────────────────────────
 
     def draw_autopark_overlay(self):
@@ -200,15 +166,12 @@ class HUD:
     def draw_frame(self, vR: float, steer_deg: float, hitch_deg: float,
                    jk_warn: bool, jk_limit: bool, ppm: float,
                    aps=None, autopark_enabled: bool = False,
-                   parking=None, state=None, paused: bool = False):
+                   paused: bool = False):
         """Single HUD call per frame — gauges + all conditional overlays.
 
         aps: AutoParkState | None
-        parking: ParkingManager | None
-        state: TruckTrailerState | None  (needed for parking distance)
         """
         from autopark_state import APMode  # local import to avoid circular dependency
-        from parking import ParkingManager
 
         self.draw(vR, steer_deg, hitch_deg, jk_warn, jk_limit, ppm)
 
@@ -232,13 +195,6 @@ class HUD:
                 self.screen.blit(hint_surf,
                                  hint_surf.get_rect(center=(W // 2,
                                                             self.screen.get_height() - 26)))
-
-        if parking is not None and state is not None:
-            self.draw_parking_hud(parking.distance_to(state), parking.success_count)
-            if parking.is_parked:
-                self.draw_parking_success(parking.success_count,
-                                          parking.success_timer,
-                                          ParkingManager.SUCCESS_HOLD)
 
         if paused:
             self.draw_paused_overlay()
